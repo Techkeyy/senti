@@ -9,3 +9,4 @@ release/
 probe/logs/
 .DS_Store
 Thumbs.db
+*.tsbuildinfo

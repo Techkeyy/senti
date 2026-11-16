@@ -108,8 +108,9 @@ const sdk = new SmartSpectraSDK({
   apiKey,
   enableTelemetry: false,
   enableAccumulatedOutput: true,
-  requestedMetrics: [...breathingMetrics, ...cardioMetrics, ...faceMetrics],
+  requestedMetrics: argVal('--metrics') === 'cardio' ? [...cardioMetrics] : [...breathingMetrics, ...cardioMetrics, ...faceMetrics],
 });
+if (argVal('--seconds')) setTimeout(shutdown, Number(argVal('--seconds')) * 1000);
 
 sdk.on('metrics', (buf, ts) => {
   try { const m = decodeMetrics(buf); log('metrics', ts, compact(m)); ingest(m); }

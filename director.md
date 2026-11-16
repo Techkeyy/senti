@@ -125,6 +125,24 @@ This is the handover document. A new director should be able to take over from t
 
 | When | Agent | Order | Result | Director verdict |
 | --- | --- | --- | --- | --- |
+| 16 Nov | Sonnet | Phase 2 probe (`probe/probe.mjs`): SDK on webcam, JSONL log, calm/tense segments, summary | SDK 3.5.0 loads on Windows; camera listing works without a key ("HP HD Camera"); a missing key gives a clean error. Live run untested (no key) | ACCEPTED as COMPONENT PROVEN (offline). Re-verified by the director. Committed 7e1bac7 |
+| 16 Nov | Sonnet | Scaffold electron-vite React TS app + recorder spike: webcam preview and screen recording at the same time, plus an autotest | Camera 332 frames in 10 s while recording the screen; webm saved; build + typecheck pass. Versions: electron 45.3.3, electron-vite 6, vite 8, React 19.3, TS 7.0.2, electron-builder 26.18 | ACCEPTED, COMPONENT PROVEN. Director re-ran it: 301 frames, camera "live", 794 KB webm. Still unverified: window (not screen) capture, fullscreen games, installer |
+| 16 Nov | Director | Live probe smoke run with the owner's key (all metric groups, 3.5 min) | Auth OK. Face (expressions ~30/s, blink, talk) and breathing arrive. **Zero cardio (pulse/HRV) samples, no error.** kFaceNotForward on most frames | Check 2 PARTIAL. Next: cardio-only run with the face forward, to tell an authorization problem from a positioning problem |
+
+**Gotchas learned:**
+- The permission handler must allow both `media` and `display-capture`.
+- The electron postinstall may skip the binary download; fix with `node node_modules/electron/install.js`.
+- TypeScript 7 has no `baseUrl`.
+- Git Bash `timeout` cannot SIGINT a native Windows node process. Use the probe's `--seconds N` instead.
+
+**Field mapping (from SDK `generated.d.ts`, via the probe):**
+- pulse: `cardio.pulseRate[] {value, confidence, stable, timestamp}`
+- breathing: `breathing.rate[]`
+- HRV: `cardio.hrv[] {rmssd, meanNn, sdnn, baevsky}`
+- blink and talking: `face.blinking[]` and `face.talking[]`, each `{detected, stable, timestamp}`
+- expressions: `face.expression[] {scores[{type, confidence 0-100}]}`; types are ANGRY, CONTEMPT, DISGUST, FEAR, HAPPY, NEUTRAL, SAD, SURPRISE
+
+Error codes: kAuthenticationFailed=2, kCreditExhausted=4, kMetricNotAuthorized=13.
 
 ## 12. Open questions / risks
 
