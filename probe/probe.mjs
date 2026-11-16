@@ -111,6 +111,16 @@ const sdk = new SmartSpectraSDK({
   requestedMetrics: argVal('--metrics') === 'cardio' ? [...cardioMetrics] : [...breathingMetrics, ...cardioMetrics, ...faceMetrics],
 });
 if (argVal('--seconds')) setTimeout(shutdown, Number(argVal('--seconds')) * 1000);
+// --plan rest:60,calm:180,tense:180 switches segments on a timer, then stops.
+if (argVal('--plan')) {
+  let at = 0;
+  for (const part of argVal('--plan').split(',')) {
+    const [name, secs] = part.split(':');
+    setTimeout(() => { if (name !== 'rest') setSeg(name); console.log(`\n========== NOW: ${name.toUpperCase()} for ${secs} s ==========\n`); }, at * 1000);
+    at += Number(secs);
+  }
+  setTimeout(shutdown, at * 1000);
+}
 
 sdk.on('metrics', (buf, ts) => {
   try { const m = decodeMetrics(buf); log('metrics', ts, compact(m)); ingest(m); }
@@ -125,7 +135,16 @@ sdk.on('validationStatus', (code, ts, hint) => {
   live.hint = code === ValidationCode.kOk ? 'ok' : `${n}${hint ? ' (' + hint + ')' : ''}`;
   if (code !== ValidationCode.kOk) { const v = S().valid; v[n] = (v[n] ?? 0) + 1; }
 });
-sdk.on('processingStatus', (st) => { log('processingStatus', null, { status: st }); console.log(`[processingStatus ${st}]`); });
+let restarts = 0;
+sdk.on('processingStatus', (st) => {
+  log('processingStatus', null, { status: st }); console.log(`[processingStatus ${st}]`);
+  // kError (5): rebuild and restart the camera session, as the SDK docs say reset() is for.
+  if (st === 5 && !stopping) setTimeout(() => {
+    if (stopping) return;
+    try { sdk.reset(); sdk.useCamera(CameraSelection.byId(camId)); sdk.start(); restarts++; log('restart', null, { restarts }); console.log(`[restarted session #${restarts}]`); }
+    catch (e) { console.error('restart failed:', e.message); }
+  }, 500);
+});
 sdk.on('error', (code, message, retryable) => {
   const n = nameOf(SmartSpectraErrorCode, code);
   log('error', null, { code, name: n, message, retryable });
@@ -167,6 +186,7 @@ function summary() {
   for (const p of bad) console.log(`  [${p.seg}] ${p.name}: ${p.message}`);
   const other = problems.filter((p) => !bad.includes(p));
   if (other.length) { console.log('other errors:'); for (const p of other) console.log(`  [${p.seg}] ${p.name}: ${p.message}`); }
+  console.log(`session restarts after errors: ${restarts}`);
   console.log(`\nlog: ${logPath}`);
 }
 

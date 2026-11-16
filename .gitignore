@@ -10,3 +10,4 @@ probe/logs/
 .DS_Store
 Thumbs.db
 *.tsbuildinfo
+probe/run-*.txt

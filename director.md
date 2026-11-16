@@ -129,6 +129,20 @@ This is the handover document. A new director should be able to take over from t
 | 16 Nov | Sonnet | Scaffold electron-vite React TS app + recorder spike: webcam preview and screen recording at the same time, plus an autotest | Camera 332 frames in 10 s while recording the screen; webm saved; build + typecheck pass. Versions: electron 45.3.3, electron-vite 6, vite 8, React 19.3, TS 7.0.2, electron-builder 26.18 | ACCEPTED, COMPONENT PROVEN. Director re-ran it: 301 frames, camera "live", 794 KB webm. Still unverified: window (not screen) capture, fullscreen games, installer |
 | 16 Nov | Director | Live probe smoke run with the owner's key (all metric groups, 3.5 min) | Auth OK. Face (expressions ~30/s, blink, talk) and breathing arrive. **Zero cardio (pulse/HRV) samples, no error.** kFaceNotForward on most frames | Check 2 PARTIAL. Next: cardio-only run with the face forward, to tell an authorization problem from a positioning problem |
 
+| 16 Nov | Director | Root cause of missing pulse: captured the frame the SDK sees (`probe/frame.mjs`, `videoOutput`) | **The camera is aimed low: the owner's face is cut off at the top-right edge.** The SDK pipeline is fine: native 1280x720 NV12; this HP camera has no AE lock, so auto exposure stays on (lighting matters). The frame was deleted after viewing (privacy) | Positioning problem, not authorization. Rerun with the face centred |
+
+**Product lessons from this:**
+1. The camera check must show the tester the camera view plus the SDK hint, and block "Start" until validation is OK for a few seconds.
+2. Only the consenting tester may be in view (a second face blocks processing, and the consent screen says so).
+3. Pulse needs 20 to 60 s to appear, because the model downloads on start (per the pulse-mirror README). Show "finding your pulse".
+4. Disclosure: per the Presage docs, the SDK sends derived number summaries (no video) to Presage for an LLM wellness check-in, and this cannot be switched off. This goes in the consent screen and the post.
+
+5. A probe run hit **kNetworkError** mid-session and produced nothing afterwards (matches the open SDK issue #18). The app must detect this and rebuild/restart the SDK while keeping the session; pulse-mirror does this.
+6. If the camera is busy (e.g. the Windows Camera app is open), the SDK sits in "starting" (status 2) forever with no error. The app needs a start timeout that says "Your camera is in use by another app".
+7. A face-centred run on 16 Nov gave pulse 79.6 BPM (2 samples, conf 15, first at ~127 s) and breathing stable from ~47 s (conf ~86). **Pulse is authorized but slow and weak on this laptop**, so the felt curve leans on expressions, talking, blinking and breathing, with pulse added only when confidence is high.
+
+8. **Decision (16 Nov): camera ownership = renderer.** The SDK's native capture (`useCamera`, Media Foundation) on this HP camera stalls about 3 s shortly after start, possibly from its exposure-lock step. That throws `kTimestampGap` and processing status kError, and then `sdk.reset()` **blocks the event loop forever**. The renderer path (`getUserMedia` → `useMediaStream`) is what pulse-mirror uses on Windows, and our recorder spike already proved getUserMedia is steady at 30 fps. So recovery means destroy + rebuild the SDK instance (as pulse-mirror does), **never `reset()`**.
+
 **Gotchas learned:**
 - The permission handler must allow both `media` and `display-capture`.
 - The electron postinstall may skip the binary download; fix with `node node_modules/electron/install.js`.
