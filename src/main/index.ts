@@ -4,13 +4,20 @@ import { join } from 'path'
 import { IPC } from '../shared/ipc'
 import { registerRecorder } from './recorder'
 import { bindSensor, registerSensor } from './sensor'
+import { registerSettings } from './settings'
+import { registerSensing } from './sensing'
+import { registerSessions, registerSessionSchemes } from './sessions'
 
 const autotest = process.env.SENTI_SPIKE_AUTOTEST === '1'
+let mainWindow: BrowserWindow | null = null
+const getWindow = (): BrowserWindow | null => mainWindow
+
+registerSessionSchemes()
 
 function createWindow(): void {
   const win = new BrowserWindow({
-    width: 1000,
-    height: 760,
+    width: 1200,
+    height: 820,
     show: false,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -19,6 +26,8 @@ function createWindow(): void {
       backgroundThrottling: false
     }
   })
+  mainWindow = win
+  win.on('closed', () => (mainWindow = null))
   bindSensor(win)
   win.webContents.on('console-message', (event) => {
     const msg = event.message
@@ -36,6 +45,9 @@ function createWindow(): void {
 app.whenReady().then(() => {
   registerRecorder()
   registerSensor()
+  registerSettings()
+  registerSensing(getWindow)
+  registerSessions(getWindow)
 
   ipcMain.handle(IPC.spikeConfig, () => ({ autotest }))
   ipcMain.handle(IPC.spikeResult, (_e, result: unknown) => {
