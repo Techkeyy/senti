@@ -143,6 +143,9 @@ This is the handover document. A new director should be able to take over from t
 
 8. **Decision (16 Nov): camera ownership = renderer.** The SDK's native capture (`useCamera`, Media Foundation) on this HP camera stalls about 3 s shortly after start, possibly from its exposure-lock step. That throws `kTimestampGap` and processing status kError, and then `sdk.reset()` **blocks the event loop forever**. The renderer path (`getUserMedia` → `useMediaStream`) is what pulse-mirror uses on Windows, and our recorder spike already proved getUserMedia is steady at 30 fps. So recovery means destroy + rebuild the SDK instance (as pulse-mirror does), **never `reset()`**.
 
+9. **Black image root cause (SDK issue #19):** the renderer SDK locks exposure, white balance and focus to manual and never restores them, so the camera stayed frozen dark (luma 2 to 7). Fix (`src/renderer/src/sensing/camera.ts` `cameraAuto`): set `continuous` modes after getUserMedia, wait 1.5 s, reapply if luma < 25, and restore before stopping. After the fix: luma ~101 and 702 metrics in 40 s (expressions 86% neutral, blinks).
+10. **Low light reduces fps.** In auto exposure this room needed exposureTime 10000 (about 1 s), so fps fell to 10 to 20, giving kFrameRateTooLow and kSustainedLowFrameRate (2 rebuilds in 40 s). No pulse or breathing at that fps. **Real requirement: a lit face.** The camera check must measure fps and luma and say "Add light in front of you" before allowing Start.
+
 **Gotchas learned:**
 - The permission handler must allow both `media` and `display-capture`.
 - The electron postinstall may skip the binary download; fix with `node node_modules/electron/install.js`.

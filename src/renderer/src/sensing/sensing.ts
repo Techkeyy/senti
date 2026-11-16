@@ -1,9 +1,7 @@
 import {
   SmartSpectraSDK,
   ProcessingStatus,
-  breathingMetrics,
-  cardioMetrics,
-  faceMetrics
+  MetricType
 } from '@smartspectra/node-sdk/renderer'
 import { decodeMetrics, Metrics } from '@smartspectra/node-sdk/messages'
 
@@ -116,7 +114,9 @@ export class Sensing {
       apiKey: this.opts.apiKey,
       enableTelemetry: false,
       enableAccumulatedOutput: false,
-      requestedMetrics: [...breathingMetrics, ...cardioMetrics, ...faceMetrics]
+      // Only what Senti uses: breathing rate, pulse rate, HRV, blinking, talking, expressions.
+      // Skipping the 478-point face mesh and raw traces saves decode and copy work on slow laptops.
+      requestedMetrics: [MetricType.BREATHING_RATE, MetricType.PULSE_RATE, MetricType.HRV, MetricType.FACE_LANDMARKS, MetricType.BLINKING, MetricType.TALKING, MetricType.EXPRESSIONS]
     })
     sdk.on('metrics', (buf, ts) => {
       if (!live()) return
