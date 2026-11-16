@@ -3,6 +3,7 @@ import { writeFileSync } from 'fs'
 import { join } from 'path'
 import { IPC } from '../shared/ipc'
 import { registerRecorder } from './recorder'
+import { bindSensor, registerSensor } from './sensor'
 
 const autotest = process.env.SENTI_SPIKE_AUTOTEST === '1'
 
@@ -18,6 +19,11 @@ function createWindow(): void {
       backgroundThrottling: false
     }
   })
+  bindSensor(win)
+  win.webContents.on('console-message', (event) => {
+    const msg = event.message
+    if (typeof msg === 'string' && msg.startsWith('SENTI_')) process.stdout.write(msg + '\n')
+  })
   win.on('ready-to-show', () => win.show())
 
   if (process.env['ELECTRON_RENDERER_URL']) {
@@ -29,6 +35,7 @@ function createWindow(): void {
 
 app.whenReady().then(() => {
   registerRecorder()
+  registerSensor()
 
   ipcMain.handle(IPC.spikeConfig, () => ({ autotest }))
   ipcMain.handle(IPC.spikeResult, (_e, result: unknown) => {

@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import type { CaptureSource } from '../../shared/ipc'
 import { useRecorder } from './useRecorder'
+import SensorTest from './SensorTest'
+import type { SensorConfig } from '../../shared/ipc'
 
 const AUTOTEST_MS = 10_000
 
-export default function App() {
+function RecorderSpike({ onSensorTest }: { onSensorTest: () => void }) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const trackRef = useRef<MediaStreamTrack | null>(null)
   const frameCount = useRef(0)
@@ -75,7 +77,10 @@ export default function App() {
         await window.senti.spikeResult({ ok: false, error: `${err.name}: ${err.message}` })
       }
     })()
-    return () => clearInterval(id)
+    return () => {
+      clearInterval(id)
+      trackRef.current?.stop()
+    }
   }, [])
 
   async function onStop(): Promise<void> {
@@ -86,6 +91,9 @@ export default function App() {
   return (
     <div style={{ padding: 16, fontFamily: 'sans-serif' }}>
       <h1>Senti recorder spike</h1>
+      <p>
+        <button onClick={onSensorTest}>Sensor Test</button>
+      </p>
       <video ref={videoRef} muted width={320} height={240} />
       <p>
         Camera track: {readyState} | camera frames: {frames}
@@ -108,4 +116,20 @@ export default function App() {
       {error && <p style={{ color: 'red' }}>{error}</p>}
     </div>
   )
+}
+
+export default function App() {
+  const [config, setConfig] = useState<SensorConfig | null>(null)
+  const [view, setView] = useState<'recorder' | 'sensor'>('recorder')
+
+  useEffect(() => {
+    window.senti.sensorConfig().then((c) => {
+      setConfig(c)
+      if (c.plan) setView('sensor')
+    })
+  }, [])
+
+  if (!config) return null
+  if (view === 'sensor') return <SensorTest config={config} onBack={() => setView('recorder')} />
+  return <RecorderSpike onSensorTest={() => setView('sensor')} />
 }

@@ -149,6 +149,8 @@ This is the handover document. A new director should be able to take over from t
 - TypeScript 7 has no `baseUrl`.
 - Git Bash `timeout` cannot SIGINT a native Windows node process. Use the probe's `--seconds N` instead.
 
+| 16 Nov | Sonnet | Renderer-path SDK integration + Sensor Test screen (timed protocol, JSONL log, destroy/rebuild recovery, camera-busy check) | running | pending |
+
 **Field mapping (from SDK `generated.d.ts`, via the probe):**
 - pulse: `cardio.pulseRate[] {value, confidence, stable, timestamp}`
 - breathing: `breathing.rate[]`
