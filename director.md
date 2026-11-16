@@ -75,7 +75,7 @@ This is the handover document. A new director should be able to take over from t
 | --- | --- | --- | --- |
 | 0 Understand | research, rules, SDK surface | research doc complete | DONE (16 Nov) |
 | 1 Define | promise, Core Outcome, ledger, scope | this file | DONE (16 Nov) |
-| 2 Feasibility | probe: key works, face metrics authorized, credits, signal separation, camera + screen capture coexist | all 5 checks PASS with logged evidence | IN PROGRESS |
+| 2 Feasibility | probe: key works, face metrics authorized, credits, signal separation, camera + screen capture coexist | all 5 checks PASS with logged evidence | DONE 16 Nov (key, face metrics, coexist, startle separation PASS; pulse authorized but unreliable on owner laptop; credits: no errors seen) |
 | 3 Vertical slice | one playtest end to end (ugly UI ok): curve → session → report with real signals | Core Outcome observed once | PENDING |
 | 4 Product shell | design skill: real UI, four states, copy | first-time-user pass | PENDING |
 | 5 Failure/recovery | camera lost, no face, key invalid, credits exhausted, app restart mid-session, delete | critical-bug red-team pass | PENDING |
@@ -113,7 +113,7 @@ This is the handover document. A new director should be able to take over from t
 
 ## 9. Current status
 
-**BUILDING: CORE PATH NOT YET PROVEN.** Repo created. Phase 2 probe being built. **Blocked on the owner's Presage API key** (register at https://physiology.presagetech.com/auth/register) and on a human in front of the webcam for the signal-separation test.
+**BUILDING: CORE SIGNAL PROVEN (startle test PASS, 16 Nov). Phase 3 vertical slice next.** Sensing = native main-process camera, face-only metrics (landmarks, talking, expressions), destroy-and-rebuild recovery.
 
 ## 10. Decision log
 
@@ -145,6 +145,35 @@ This is the handover document. A new director should be able to take over from t
 
 9. **Black image root cause (SDK issue #19):** the renderer SDK locks exposure, white balance and focus to manual and never restores them, so the camera stayed frozen dark (luma 2 to 7). Fix (`src/renderer/src/sensing/camera.ts` `cameraAuto`): set `continuous` modes after getUserMedia, wait 1.5 s, reapply if luma < 25, and restore before stopping. After the fix: luma ~101 and 702 metrics in 40 s (expressions 86% neutral, blinks).
 10. **Low light reduces fps.** In auto exposure this room needed exposureTime 10000 (about 1 s), so fps fell to 10 to 20, giving kFrameRateTooLow and kSustainedLowFrameRate (2 rebuilds in 40 s). No pulse or breathing at that fps. **Real requirement: a lit face.** The camera check must measure fps and luma and say "Add light in front of you" before allowing Start.
+
+11. **Hardware limit (owner laptop: i5-7300U, 2 cores, 2017).** Baseline CPU ~20% busy. With a face in view and cardio requested:
+    - renderer path: ~15 to 20 fps;
+    - native path: ~17 to 22 fps.
+
+    The SDK stops with kSustainedLowFrameRate about every 30 s; rebuilding recovers each time (`probe/native-soak.mjs`: 6 rebuilds in 3 min; pulse 73 to 90, conf up to 63). **Face-only metrics: 0 restarts in 60 s at ~20 fps.** Native at 640x480: 26 fps at first, then a timestamp-gap stall and dark exposure after the rebuild.
+12. **Decision (16 Nov): face-led felt curve.** Felt intensity is built from expressions (fear/surprise/non-neutral vs baseline), blink suppression and talking bursts. These run on modest PCs and react to individual beats. Pulse, breathing and HRV are added when the machine sustains them (the Presage Device Readiness check plus observed fps), and the UI says which signals are active. Requesting only the used metrics (no traces) also cut load.
+
+13. **Separation test #1 (16 Nov, face-only native, rest 60 / calm 180 / tense 180): NOT PROVEN.**
+    - Segment means: NEUTRAL 12/11/17, FEAR 21/29/19, SURPRISE 62/54/53, SAD 4/5/9, talking 0.24/0.58/0.07, blinks ~0/min (detection not working at ~20 fps).
+    - Expressions are biased for this face and lighting: ~60% "surprise" at rest.
+    - Confounds: a second face was in view during calm ("only one face allowed"), so the talking difference is unreliable. Block averages also hide second-long scares, and no time series was saved.
+    - Gate status: **FAIL / inconclusive.** One clean rerun is allowed with a per-second time series and pre-registered criteria (below). If it fails, pivot.
+    - **Pre-registered criteria for rerun:** PASS if (a) a combined arousal score (non-neutral + fear + surprise − rest baseline, or talking/silence) has a tense mean outside the calm mean ± 2 SD of its 10-s windows, OR (b) the per-second trace shows visible spikes during tense that are absent in calm (≥3 spikes > calm p95, each lasting 1 s or more). Otherwise FAIL.
+
+14. **Rethink (16 Nov, owner asked).** Candidates scored under the proven constraints:
+    - **A. Senti re-based on behaviour** (startle = landmark-speed spike, freeze = stillness, look-away = face turned/lost, vocal reaction = talking burst; expressions and pulse are extras).
+    - B. Camera-only meeting talk-time: lost because a mic does it better.
+    - C. Trailer reaction tester: lost because Ad Pulse Lab already did it.
+    - D. Posture coach: lost because it is crowded and not novel.
+
+    **Recommended: A**, gated by a pre-registered startle test: during jump scares, ≥3 per-second head-motion spikes above the calm p99, and ≤1 in calm. If it FAILS, drop Senti entirely and re-run the research.
+
+15. **Startle test (16 Nov, `probe/startle.mjs`, native face-only, settle 20 / calm 90 / tense 90): PASS.** Pre-registered rule met:
+    - threshold (calm p99) 1.03 face-widths/s; spike events calm 1 vs **tense 11**;
+    - head speed median 0.19 vs 0.49, p90 0.49 vs 2.33, max 1.56 vs 9.17;
+    - talking 0.12 vs 0.58; fear 10.7 vs 17.0; 1 rebuild, recovered.
+
+    Limit: n = 1 person, one session (state this in the README). **The load-bearing assumption is proven for the behaviour-based felt curve.** The trace is in `probe/logs/` (gitignored).
 
 **Gotchas learned:**
 - The permission handler must allow both `media` and `display-capture`.
