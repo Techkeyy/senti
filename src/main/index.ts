@@ -1,14 +1,10 @@
-import { app, BrowserWindow, ipcMain } from 'electron'
-import { writeFileSync } from 'fs'
+import { app, BrowserWindow } from 'electron'
 import { join } from 'path'
-import { IPC } from '../shared/ipc'
 import { registerRecorder } from './recorder'
-import { bindSensor, registerSensor } from './sensor'
 import { registerSettings } from './settings'
 import { registerSensing } from './sensing'
 import { registerSessions, registerSessionSchemes } from './sessions'
 
-const autotest = process.env.SENTI_SPIKE_AUTOTEST === '1'
 let mainWindow: BrowserWindow | null = null
 const getWindow = (): BrowserWindow | null => mainWindow
 
@@ -28,7 +24,6 @@ function createWindow(): void {
   })
   mainWindow = win
   win.on('closed', () => (mainWindow = null))
-  bindSensor(win)
   win.webContents.on('console-message', (event) => {
     const msg = event.message
     if (typeof msg === 'string' && msg.startsWith('SENTI_')) process.stdout.write(msg + '\n')
@@ -44,17 +39,10 @@ function createWindow(): void {
 
 app.whenReady().then(() => {
   registerRecorder()
-  registerSensor()
   registerSettings()
   registerSensing(getWindow)
   registerSessions(getWindow)
 
-  ipcMain.handle(IPC.spikeConfig, () => ({ autotest }))
-  ipcMain.handle(IPC.spikeResult, (_e, result: unknown) => {
-    writeFileSync(join(app.getPath('userData'), 'spike-result.json'), JSON.stringify(result, null, 2))
-    process.stdout.write(`SENTI_SPIKE_RESULT ${JSON.stringify(result)}\n`)
-    if (autotest) app.quit()
-  })
 
   createWindow()
 })

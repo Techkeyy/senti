@@ -1,53 +1,58 @@
-import { useCallback, useRef, useState } from 'react'
-
-export interface RecordingResult {
-  path: string
-  bytes: number
-  durationMs: number
+export interface ActiveRecording {
+  /** Epoch ms at the moment MediaRecorder actually started. */
+  startedAtMs: number
+  /** Stops recording, releases the capture and returns the webm. */
+  stop(): Promise<Blob>
 }
 
-/** Records the source chosen via window.senti.selectSource(); main grants it in the display-media handler. */
-export function useRecorder() {
-  const [recording, setRecording] = useState(false)
-  const recorderRef = useRef<MediaRecorder | null>(null)
-  const chunksRef = useRef<Blob[]>([])
-  const startedAtRef = useRef(0)
-
-  const start = useCallback(async (sourceId: string) => {
-    await window.senti.selectSource(sourceId)
-    let stream: MediaStream
-    try {
-      stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false })
-    } catch (e) {
-      throw new Error(`getDisplayMedia (screen) failed: ${(e as Error).name}: ${(e as Error).message}`)
+/**
+ * Records the source chosen with window.senti.selectSource(); main grants it in the display-media handler.
+ * Resolves once MediaRecorder reports it started. onEnded fires if the captured window goes away.
+ */
+export async function startRecording(sourceId: string, onEnded: () => void): Promise<ActiveRecording> {
+  await window.senti.selectSource(sourceId)
+  let stream: MediaStream
+  try {
+    stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false })
+  } catch (e) {
+    throw new Error(`Could not capture that window (${(e as Error).name}). Pick it again and retry.`)
+  }
+  // vp8 is lighter on the CPU than vp9, which matters while the camera reader is running.
+  const mimeType = ['video/webm;codecs=vp8', 'video/webm'].find((m) => MediaRecorder.isTypeSupported(m))
+  const rec = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 2_500_000 })
+  const chunks: Blob[] = []
+  rec.ondataavailable = (e) => {
+    if (e.data.size > 0) chunks.push(e.data)
+  }
+  const release = (): void => stream.getTracks().forEach((t) => t.stop())
+  const startedAtMs = await new Promise<number>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      release()
+      reject(new Error('The recorder did not start.'))
+    }, 8000)
+    rec.onstart = () => {
+      clearTimeout(timer)
+      resolve(Date.now())
     }
-    const rec = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp9' })
-    chunksRef.current = []
-    rec.ondataavailable = (e) => {
-      if (e.data.size > 0) chunksRef.current.push(e.data)
+    rec.onerror = () => {
+      clearTimeout(timer)
+      release()
+      reject(new Error('The recorder failed to start.'))
     }
-    startedAtRef.current = performance.now()
     rec.start(1000)
-    recorderRef.current = rec
-    setRecording(true)
-  }, [])
-
-  const stop = useCallback(async (): Promise<RecordingResult> => {
-    const rec = recorderRef.current
-    if (!rec) throw new Error('not recording')
-    const stopped = new Promise<void>((resolve) => {
-      rec.onstop = () => resolve()
-    })
-    rec.stop()
-    await stopped
-    const durationMs = performance.now() - startedAtRef.current
-    rec.stream.getTracks().forEach((t) => t.stop())
-    recorderRef.current = null
-    setRecording(false)
-    const blob = new Blob(chunksRef.current, { type: 'video/webm' })
-    const saved = await window.senti.saveRecording(await blob.arrayBuffer())
-    return { ...saved, durationMs }
-  }, [])
-
-  return { recording, start, stop }
+  })
+  stream.getVideoTracks()[0]?.addEventListener('ended', onEnded)
+  return {
+    startedAtMs,
+    stop: () =>
+      new Promise<Blob>((resolve) => {
+        const finish = (): void => {
+          release()
+          resolve(new Blob(chunks, { type: 'video/webm' }))
+        }
+        if (rec.state === 'inactive') return finish()
+        rec.onstop = finish
+        rec.stop()
+      })
+  }
 }

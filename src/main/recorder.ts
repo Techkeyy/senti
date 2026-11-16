@@ -1,7 +1,5 @@
-import { app, desktopCapturer, ipcMain, session } from 'electron'
-import { mkdir, writeFile } from 'fs/promises'
-import { join } from 'path'
-import { IPC, type CaptureSource, type SaveRecordingResult } from '../shared/ipc'
+import { desktopCapturer, ipcMain, session } from 'electron'
+import { IPC, type CaptureSource } from '../shared/ipc'
 
 let selectedSourceId: string | null = null
 
@@ -16,15 +14,6 @@ export async function listSources(): Promise<CaptureSource[]> {
     kind: s.id.startsWith('screen:') ? 'screen' : 'window',
     thumbnail: s.thumbnail.toDataURL()
   }))
-}
-
-async function saveRecording(data: ArrayBuffer): Promise<SaveRecordingResult> {
-  const dir = join(app.getPath('userData'), 'sessions', `spike-${Date.now()}`)
-  await mkdir(dir, { recursive: true })
-  const path = join(dir, 'gameplay.webm')
-  const buf = Buffer.from(data)
-  await writeFile(path, buf)
-  return { path, bytes: buf.length }
 }
 
 export function registerRecorder(): void {
@@ -47,5 +36,4 @@ export function registerRecorder(): void {
   ipcMain.handle(IPC.selectSource, (_e, id: string) => {
     selectedSourceId = id
   })
-  ipcMain.handle(IPC.saveRecording, (_e, data: ArrayBuffer) => saveRecording(data))
 }
