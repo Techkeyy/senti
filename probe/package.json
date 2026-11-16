@@ -1,0 +1,9 @@
+{
+  "name": "senti-probe",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@smartspectra/node-sdk": "3.5.0"
+  }
+}
