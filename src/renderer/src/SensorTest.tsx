@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { ProcessingStatus, SmartSpectraErrorCode, ValidationCode } from '@smartspectra/node-sdk/renderer'
-import { Sensing, SegmentStats, type SensingEvent } from './sensing'
+import { Sensing, SegmentStats, cameraAuto, type SensingEvent } from './sensing'
 import type { SensorConfig } from '../../shared/ipc'
 
 const DEFAULT_PLAN = 'rest:60,calm:180,tense:180'
@@ -115,6 +115,10 @@ export default function SensorTest({ config, onBack }: { config: SensorConfig; o
         await video.play().catch(() => undefined)
       }
       const track = stream.getVideoTracks()[0]
+      // The SDK locks exposure/white balance/focus to manual and never restores them (SDK issue #19),
+      // so the camera can start near-black. Hand the SDK a camera in automatic mode, settled.
+      await cameraAuto(track)
+      await new Promise((r) => setTimeout(r, 1500))
       const run0 = await window.senti.sensorBegin()
       runId = run0.id
       const stats = new SegmentStats(nowMs, seg)
@@ -122,6 +126,7 @@ export default function SensorTest({ config, onBack }: { config: SensorConfig; o
         plan: steps,
         camera: track.label,
         settings: track.getSettings(),
+        capabilities: track.getCapabilities?.(),
         sdk: 'renderer useMediaStream',
         forceRebuild: config.forceRebuild
       })
@@ -154,6 +159,13 @@ export default function SensorTest({ config, onBack }: { config: SensorConfig; o
         }
       }
       fpsId = setInterval(() => {
+        const luma = meanLuma()
+        // If the SDK's exposure lock collapsed the image, put the camera back in automatic mode
+        // (the SDK's own native camera path does the same: "exposure reverted to AUTO").
+        if (luma != null && luma < 25) {
+          void cameraAuto(track)
+          log('note', null, { message: `image dark (luma ${luma}), camera set back to automatic exposure` })
+        }
         const dt = (nowMs() - lastT) / 1000
         const sent = sensing?.framesSent ?? 0
         const not = sensing?.framesNotSent ?? 0
@@ -305,6 +317,7 @@ export default function SensorTest({ config, onBack }: { config: SensorConfig; o
       setUi((u) => ({ ...u, phase: 'error', warning: `${err.name}: ${err.message}` }))
       console.error('SENTI_SENSOR_ERROR', err.message)
     } finally {
+      for (const t of stream?.getVideoTracks() ?? []) await cameraAuto(t)
       stream?.getTracks().forEach((t) => t.stop())
     }
   }

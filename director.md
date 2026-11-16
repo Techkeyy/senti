@@ -149,7 +149,7 @@ This is the handover document. A new director should be able to take over from t
 - TypeScript 7 has no `baseUrl`.
 - Git Bash `timeout` cannot SIGINT a native Windows node process. Use the probe's `--seconds N` instead.
 
-| 16 Nov | Sonnet | Renderer-path SDK integration + Sensor Test screen (timed protocol, JSONL log, destroy/rebuild recovery, camera-busy check) | running | pending |
+| 16 Nov | Sonnet | Renderer-path SDK integration + Sensor Test screen (timed protocol, JSONL log, destroy/rebuild recovery, camera-busy check) | The SDK loads in the sandboxed renderer: SDK preload via `session.registerPreloadScript`, plus `bindSmartSpectraIpc`. No kTimestampGap. **1280x720 → kSustainedLowFrameRate (error 14) every ~10 s; 640x480 steady 30 fps (now the default).** The forced rebuild returns to running in 1.6 s. Smoke runs had a black image (luma ~2), so 0 metrics | ACCEPTED as INTEGRATION PROVEN (no live metrics yet). Director re-ran typecheck, build and autotest; no `reset()` calls; telemetry off. Committed. UNVERIFIED: metrics on a real face at 640x480, metrics after a rebuild, preload under asar |
 
 **Field mapping (from SDK `generated.d.ts`, via the probe):**
 - pulse: `cardio.pulseRate[] {value, confidence, stable, timestamp}`
