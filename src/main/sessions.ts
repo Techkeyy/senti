@@ -3,10 +3,8 @@
 // See src/shared/session.ts and src/shared/ipc.ts.
 import { app, globalShortcut, ipcMain, net, protocol, shell } from 'electron'
 import type { BrowserWindow } from 'electron'
-import { createReadStream } from 'fs'
-import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'fs/promises'
+import { mkdir, open, readdir, readFile, rename, rm, stat, writeFile } from 'fs/promises'
 import { join } from 'path'
-import { Readable } from 'stream'
 import { IPC, type SessionSummary } from '../shared/ipc'
 import type { Session } from '../shared/session'
 
@@ -94,6 +92,8 @@ async function deleteSession(id: string): Promise<void> {
 
 // ---------- senti-media:// with Range support ----------
 
+const MAX_CHUNK = 4 * 1024 * 1024
+
 async function handleMedia(request: Request): Promise<Response> {
   try {
     const url = new URL(request.url)
@@ -104,11 +104,10 @@ async function handleMedia(request: Request): Promise<Response> {
     if (!st || !st.isFile()) return new Response('Not found', { status: 404 })
     const size = st.size
     const base = { 'Content-Type': 'video/webm', 'Accept-Ranges': 'bytes' }
-    const range = request.headers.get('range')
-    if (!range) {
-      const body = Readable.toWeb(createReadStream(path)) as unknown as ReadableStream
-      return new Response(body, { status: 200, headers: { ...base, 'Content-Length': String(size) } })
-    }
+    // Serve byte ranges from a plain file read, capped per response. No Node-to-web stream: the player cancels
+    // requests when it seeks, and a cancelled stream conversion crashed the main process (seen 17 Nov, report
+    // shown right after saving). A capped 206 is valid HTTP; the player simply asks for the next range.
+    const range = request.headers.get('range') ?? 'bytes=0-'
     const m = /^bytes=(\d*)-(\d*)$/.exec(range.trim())
     if (!m || (m[1] === '' && m[2] === '')) {
       return new Response('Bad range', { status: 416, headers: { 'Content-Range': `bytes */${size}` } })
@@ -116,8 +115,7 @@ async function handleMedia(request: Request): Promise<Response> {
     let start: number
     let end: number
     if (m[1] === '') {
-      const suffix = Number(m[2])
-      start = Math.max(0, size - suffix)
+      start = Math.max(0, size - Number(m[2]))
       end = size - 1
     } else {
       start = Number(m[1])
@@ -126,10 +124,17 @@ async function handleMedia(request: Request): Promise<Response> {
     if (start >= size || start > end) {
       return new Response('Range not satisfiable', { status: 416, headers: { 'Content-Range': `bytes */${size}` } })
     }
-    const body = Readable.toWeb(createReadStream(path, { start, end })) as unknown as ReadableStream
-    return new Response(body, {
+    end = Math.min(end, start + MAX_CHUNK - 1)
+    const buf = Buffer.alloc(end - start + 1)
+    const fh = await open(path, 'r')
+    try {
+      await fh.read(buf, 0, buf.length, start)
+    } finally {
+      await fh.close()
+    }
+    return new Response(buf, {
       status: 206,
-      headers: { ...base, 'Content-Length': String(end - start + 1), 'Content-Range': `bytes ${start}-${end}/${size}` }
+      headers: { ...base, 'Content-Length': String(buf.length), 'Content-Range': `bytes ${start}-${end}/${size}` }
     })
   } catch {
     return new Response('Error', { status: 500 })
@@ -250,7 +255,7 @@ async function storageSelfTest(): Promise<void> {
       (results.range0 as { ok: boolean }).ok &&
       (results.rangeTail as { status: number; ok: boolean }).status === 206 &&
       (results.rangeTail as { ok: boolean }).ok &&
-      (results.full as { status: number }).status === 200 &&
+      (results.full as { status: number }).status === 206 &&
       results.badRange === 416 &&
       results.traversal === 400 &&
       results.deleted === true

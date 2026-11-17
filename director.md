@@ -194,6 +194,10 @@ This is the handover document. A new director should be able to take over from t
     - Builder selftests: 6 runs, 7 to 9 chunks per 10 s. Director re-ran it: 9 chunks, 191 KB, pass.
     - UNVERIFIED: the full app flow with a face in view (next: owner UAT).
 
+18. **UAT attempt 2 (17 Nov): flow completed (3:00 played, saved, report shown), but there were two defects.**
+    - **(a) Felt curve flat.** Face packets were ~0.3/s in play (vs ~28/s in the probe). A/B in the probe: adding a no-op `videoOutput` listener dropped face fps from ~27 to ~5 and caused a restart (one clean pair; a repeat was invalid because the owner had left). Fix (commit after 3f07d6c): register videoOutput only in phase 'check', deleting it from the SDK's private `_listeners` Map otherwise (pinned 3.5.0 has no off()). **CONFIRMED 17 Nov: worker selftest with face in view gives faceSeconds 41/45 (before: 3/40), 0 restarts, 29 preview frames.**
+    - **(b) "Recording could not be played" on the first report after save.** The file is valid (ffprobe and direct playback OK); reopening the report from the list plays fine (duration 180 s, seek OK), verified via CDP. Not reproducible on demand. Fix: log `SENTI_VIDEO_ERROR` with the code and retry once after 1.5 s before showing the error.
+
 **Gotchas learned:**
 - The permission handler must allow both `media` and `display-capture`.
 - The electron postinstall may skip the binary download; fix with `node node_modules/electron/install.js`.
