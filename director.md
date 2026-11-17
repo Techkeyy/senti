@@ -76,14 +76,26 @@ This is the handover document. A new director should be able to take over from t
 | 0 Understand | research, rules, SDK surface | research doc complete | DONE (16 Nov) |
 | 1 Define | promise, Core Outcome, ledger, scope | this file | DONE (16 Nov) |
 | 2 Feasibility | probe: key works, face metrics authorized, credits, signal separation, camera + screen capture coexist | all 5 checks PASS with logged evidence | DONE 16 Nov (key, face metrics, coexist, startle separation PASS; pulse authorized but unreliable on owner laptop; credits: no errors seen) |
-| 3 Vertical slice | one playtest end to end (ugly UI ok): curve → session → report with real signals | Core Outcome observed once | PENDING |
+| 3 Vertical slice | one playtest end to end (ugly UI ok): curve → session → report with real signals | Core Outcome observed once | FLOW DONE 17 Nov; Core Outcome not yet observed cleanly (sensing starved during play) |
 | 4 Product shell | design skill: real UI, four states, copy | first-time-user pass | PENDING |
-| 5 Failure/recovery | camera lost, no face, key invalid, credits exhausted, app restart mid-session, delete | critical-bug red-team pass | PENDING |
+| 5 Failure/recovery | camera lost, no face, key invalid, credits exhausted, app restart mid-session, delete | critical-bug red-team pass | PARTIAL: SDK rebuild recovery, worker crash, recorder retry, video retry and range crash fixed; red-team pass not run |
 | 6 Package | Windows installer on GitHub Releases | fresh-machine install runs | PENDING |
 | 7 UAT | owner runs the full journey from the installer | owner PASS | PENDING |
 | 8 Submission | README (perfect-readme), demo video (demo-video), DEV post, consent section | all hackathon gates | PENDING |
 
 **Halfway checkpoint:** by **19 Nov 23:59 UTC**, Phase 3 must be done. If not, cut scope.
+
+**Frozen plan after the external review (17 Nov). No new features; the felt model is frozen.**
+| When | Gate |
+| --- | --- |
+| 17 Nov | Lighter playtest on the owner laptop. PASS = face in ≥80% of play seconds AND startles detected at the scares |
+| 17 to 18 Nov | Second-person playtest (n=2) |
+| 18 Nov | Windows installer + GitHub Release, fresh-install test (risk: SDK native runtime + utilityProcess worker under asar) |
+| 19 Nov | HALFWAY: installer works + one clean real session exists, else cut polish |
+| 19 Nov | Design polish pass (one day max) |
+| 20 Nov | README (perfect-readme, incl. break-it table, n=2, hardware limit) + critical-bug red-team + audit |
+| 21 Nov | Demo video + DEV post with the consent section |
+| 22 Nov | Owner UAT from the installer, then submit (a day early) |
 
 ## 7. Feature completion matrix
 
@@ -113,7 +125,7 @@ This is the handover document. A new director should be able to take over from t
 
 ## 9. Current status
 
-**BUILDING: CORE SIGNAL PROVEN (startle test PASS, 16 Nov). Phase 3 vertical slice next.** Sensing = native main-process camera, face-only metrics (landmarks, talking, expressions), destroy-and-rebuild recovery.
+**BUILDING: MVP IMPLEMENTED, CORE OUTCOME NOT YET OBSERVED CLEANLY (17 Nov, 0792613+).** The full flow runs end to end (3:00 played, saved, report shown), and the public repo exists. Last UAT run (attempt 3): baseline face 34/36 seconds, but play face only 11/54 at 8 pkt/s with 4 restarts. On the owner's 2-core laptop, YouTube full-screen HD + recording + Presage starved sensing. Recording is now 640x360 at 5 fps and the next run uses 480p windowed playback. Felt model FROZEN. **Open gates:** clean real session, n=2 tester session, Windows installer + Release, README, red-team, demo video, DEV post.
 
 ## 10. Decision log
 
