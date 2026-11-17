@@ -198,6 +198,11 @@ This is the handover document. A new director should be able to take over from t
     - **(a) Felt curve flat.** Face packets were ~0.3/s in play (vs ~28/s in the probe). A/B in the probe: adding a no-op `videoOutput` listener dropped face fps from ~27 to ~5 and caused a restart (one clean pair; a repeat was invalid because the owner had left). Fix (commit after 3f07d6c): register videoOutput only in phase 'check', deleting it from the SDK's private `_listeners` Map otherwise (pinned 3.5.0 has no off()). **CONFIRMED 17 Nov: worker selftest with face in view gives faceSeconds 41/45 (before: 3/40), 0 restarts, 29 preview frames.**
     - **(b) "Recording could not be played" on the first report after save.** The file is valid (ffprobe and direct playback OK); reopening the report from the list plays fine (duration 180 s, seek OK), verified via CDP. Not reproducible on demand. Fix: log `SENTI_VIDEO_ERROR` with the code and retry once after 1.5 s before showing the error.
 
+19. **UAT attempt 3 (17 Nov).**
+    - **Report crash:** Senti logged `SENTI_VIDEO_ERROR code=2 PIPELINE_ERROR_READ: FFmpegDemuxer: data source error`, then the main process exited. Root cause: Node `Readable.toWeb` streams in `senti-media://` break when the player cancels a range during seeking. Fix: capped (4 MB) file reads, always 206. Storage selftest PASS (expectation updated); real recording primed and seeked 3 times via CDP with no error and the app still running.
+    - **Data:** baseline face 34/36 at 27 pkt/s (the sensing fix works). Play face 11/54 at 8 pkt/s, 4 restarts, 102 s played. With YouTube full-screen HD + screen recording + Presage on 2 cores, Presage starves. This is a hardware/load limit, not a code bug.
+    - Options for the owner: lighter content at lower resolution, lighter recording, a faster PC for the demo, and a stated system requirement.
+
 **Gotchas learned:**
 - The permission handler must allow both `media` and `display-capture`.
 - The electron postinstall may skip the binary download; fix with `node node_modules/electron/install.js`.

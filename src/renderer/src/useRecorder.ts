@@ -10,7 +10,8 @@ export interface ActiveRecording {
 }
 
 /** Light settings measured to stay healthy while the camera reader runs on a 2-core laptop. */
-const CAPTURE = { frameRate: 8, width: 960, height: 540 }
+// Kept light on purpose: on a 2-core laptop, Presage face processing + playback + recording must share the CPU (measured 17 Nov).
+const CAPTURE = { frameRate: 5, width: 640, height: 360 }
 const FIRST_DATA_TIMEOUT_MS = 30_000
 
 export class RecorderStartError extends Error {}
@@ -40,7 +41,7 @@ export async function startRecording(onEnded: () => void): Promise<ActiveRecordi
   const mimeType = ['video/webm;codecs=vp8', 'video/webm'].find((m) => MediaRecorder.isTypeSupported(m))
   let rec: MediaRecorder
   try {
-    rec = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 1_000_000 })
+    rec = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 500_000 })
   } catch {
     release()
     throw new RecorderStartError(RECORDER_START_FAILED)
