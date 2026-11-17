@@ -1,6 +1,7 @@
 export const IPC = {
   windowMinimize: 'window:minimize',
   windowRestore: 'window:restore',
+  windowSetBusy: 'window:set-busy',
   // Product API (contract owned by the director; see src/shared/session.ts)
   keyStatus: 'key:status',
   keySet: 'key:set',
@@ -32,6 +33,8 @@ export interface SentiApi {
   windowMinimize(): Promise<void>
   /** Restores and focuses the Senti window. */
   windowRestore(): Promise<void>
+  /** Tells main a playtest is running or being saved, so closing the window asks first. */
+  setBusy(busy: boolean): Promise<void>
   // Product API
   keyStatus(): Promise<{ hasKey: boolean }>
   keySet(key: string): Promise<{ hasKey: boolean }>

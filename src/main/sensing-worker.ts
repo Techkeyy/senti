@@ -17,6 +17,7 @@ import { decodeMetrics } from '@smartspectra/node-sdk/messages'
 import { constants, getPriority, setPriority } from 'node:os'
 import type { PreviewFrame, SecondSample, SensingEvent, SensingPhase, SensingState } from '../shared/session'
 import type { FromWorker, SensingResult, ToWorker } from './sensing-protocol'
+import { noteRebuild } from './rebuild-budget'
 
 const parentPort = process.parentPort
 
@@ -36,6 +37,10 @@ const BUSY_AFTER_MS = 20_000
 const PREVIEW_MIN_GAP_MS = 125 // <= 8 fps
 const PREVIEW_WIDTH = 320
 const READY_MS = 3000
+// Credits are metered: a camera check or baseline left open this long is stopped.
+const IDLE_STOP_MS = 5 * 60_000
+const IDLE_MESSAGE = 'Paused to save Presage credits. Press Retry to continue.'
+const REBUILD_LOOP_MESSAGE = 'Senti cannot keep the camera reader running. Check your internet connection and camera, then Retry.'
 const EXPR = { FEAR: 4, NEUTRAL: 6, SURPRISE: 8 }
 
 // SDK PixelFormat values: 0 RGB, 1 BGR, 2 RGBA, 3 BGRA (NV12 etc. are not converted).
@@ -87,6 +92,8 @@ let state: SensingState = 'off'
 let message: string | undefined
 let restarts = 0
 let rebuilding = false
+let rebuildTimes: number[] = []
+let idleTimer: NodeJS.Timeout | null = null
 let startedAt = 0
 let phase: SensingPhase = 'idle'
 let phaseOrigin = 0
@@ -294,10 +301,21 @@ async function teardown(o: SmartSpectraSDK): Promise<void> {
 async function rebuild(): Promise<void> {
   if (rebuilding || !on || fatalError) return
   rebuilding = true
-  state = 'recovering'
+  const budget = noteRebuild(rebuildTimes, Date.now())
+  rebuildTimes = budget.times
   const old = sdk
   token++
   sdk = null
+  if (!budget.ok) {
+    // Too many restarts in a short time: stop instead of rebuilding forever (and spending credits).
+    fatalError = true
+    state = 'error'
+    message = REBUILD_LOOP_MESSAGE
+    if (old) await teardown(old)
+    rebuilding = false
+    return
+  }
+  state = 'recovering'
   if (old) await teardown(old)
   await new Promise((r) => setTimeout(r, 500))
   if (on && !fatalError) {
@@ -312,7 +330,7 @@ function statusEvent(): SensingEvent {
   // Camera busy: still not running 20 s after start (the SDK sits in kStarting with no error).
   if (on && state === 'starting' && now - startedAt > BUSY_AFTER_MS) {
     state = 'busy'
-    message = 'Your camera is in use by another app. Close it and try again.'
+    message = 'Senti cannot start your camera. Close other apps using it, and check Windows Settings > Privacy > Camera allows desktop apps.'
   }
   const ready = state === 'running' && okSince !== null && now - okSince >= READY_MS
   const ev: SensingEvent = {
@@ -328,6 +346,7 @@ function startSensing(): void {
   on = true
   restarts = 0
   rebuilding = false
+  rebuildTimes = []
   fatalError = false
   state = 'starting'
   message = undefined
@@ -337,6 +356,7 @@ function startSensing(): void {
   lastSample = undefined
   phase = 'idle'
   build()
+  armIdle()
   sampleTimer = setInterval(() => {
     if (acc && acc.idx !== Math.floor((Date.now() - phaseOrigin) / 1000)) flushAcc()
     // While running, a second with no packets at all is still a sample (face=false), so a lost face shows up as a
@@ -372,8 +392,27 @@ function setPreviewListener(s: SmartSpectraSDK, on: boolean): void {
   }
 }
 
+/** Stops the camera reader after IDLE_STOP_MS outside play. Re-armed on every phase change. */
+function armIdle(): void {
+  if (idleTimer) clearTimeout(idleTimer)
+  idleTimer = null
+  if (!on || phase === 'play') return
+  idleTimer = setTimeout(() => {
+    idleTimer = null
+    if (!on || phase === 'play') return
+    fatalError = true // no rebuild, and no restart from the SDK's own error events
+    state = 'error'
+    message = IDLE_MESSAGE
+    token++
+    const old = sdk
+    sdk = null
+    if (old) void teardown(old)
+  }, IDLE_STOP_MS)
+}
+
 function setPhase(p: SensingPhase, playStartedAtMs?: number): void {
-  if (p === phase) return
+  // Entering 'baseline' again (Redo baseline) restarts the baseline; any other repeat is a no-op.
+  if (p === phase && p !== 'baseline') return
   if (sdk) setPreviewListener(sdk, p === 'check')
   flushAcc()
   if (p === 'baseline') {
@@ -388,9 +427,11 @@ function setPhase(p: SensingPhase, playStartedAtMs?: number): void {
   phase = p
   prev = null // never compute speed across a phase boundary
   if (p !== 'check') lastPreviewAt = 0
+  armIdle()
 }
 
-async function stopSensing(): Promise<SensingResult> {
+/** Collects the result and detaches the SDK synchronously; the slow teardown is returned for the caller to await AFTER replying. */
+function stopSensing(): { result: SensingResult; teardown: Promise<void> } {
   flushAcc()
   const out = { baseline, samples, restarts, signals: SIGNALS }
   on = false
@@ -399,13 +440,14 @@ async function stopSensing(): Promise<SensingResult> {
   if (sampleTimer) clearInterval(sampleTimer)
   if (statusTimer) clearInterval(statusTimer)
   sampleTimer = statusTimer = null
+  if (idleTimer) clearTimeout(idleTimer)
+  idleTimer = null
   const old = sdk
   sdk = null
-  if (old) await teardown(old)
   phase = 'idle'
   baseline = []
   samples = []
-  return out
+  return { result: out, teardown: old ? teardown(old) : Promise.resolve() }
 }
 
 
@@ -422,10 +464,10 @@ parentPort.on('message', (e) => {
     } else if (m.type === 'phase') {
       setPhase(m.phase, m.playStartedAtMs)
     } else if (m.type === 'stop') {
-      void stopSensing().then((result) => {
-        send({ type: 'stopped', result })
-        setTimeout(() => process.exit(0), 50)
-      })
+      // Reply first: a hanging stop/destroy must not lose the data. Main kills this process shortly after.
+      const { result, teardown: done } = stopSensing()
+      send({ type: 'stopped', result })
+      void done.finally(() => setTimeout(() => process.exit(0), 50))
     }
   } catch (err) {
     state = 'error'

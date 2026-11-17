@@ -10,6 +10,7 @@ function subscribe<T>(channel: string, cb: (v: T) => void): () => void {
 const api: SentiApi = {
   windowMinimize: () => ipcRenderer.invoke(IPC.windowMinimize),
   windowRestore: () => ipcRenderer.invoke(IPC.windowRestore),
+  setBusy: (busy) => ipcRenderer.invoke(IPC.windowSetBusy, busy),
 
   keyStatus: () => ipcRenderer.invoke(IPC.keyStatus),
   keySet: (key) => ipcRenderer.invoke(IPC.keySet, key),

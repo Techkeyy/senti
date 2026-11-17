@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import ErrorBoundary from './ErrorBoundary'
 import Report from './Report'
 import RunFlow from './RunFlow'
 import { Home, KeyScreen, NewPlaytest, Settings, type Draft } from './screens1'
@@ -80,6 +81,10 @@ export default function App() {
     case 'run':
       return <RunFlow key={`${view.phase ?? 'run'}${view.devSim?.ready ? '-ready' : ''}`} draft={view.draft} initialPhase={view.phase} devSim={view.devSim} onCancel={home} onSaved={(id) => setView({ name: 'report', id })} />
     case 'report':
-      return <Report id={view.id} onBack={home} />
+      return (
+        <ErrorBoundary key={view.id} onBack={home}>
+          <Report id={view.id} onBack={home} />
+        </ErrorBoundary>
+      )
   }
 }

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Camera, Check, HardDrive, Info, Keyboard, MonitorPlay, User } from 'lucide-react'
 import type { SecondSample, SensingStatus, Session } from '../../shared/session'
 import { computeReport } from '../../shared/felt'
-import { startRecording, type ActiveRecording } from './useRecorder'
+import { RecorderAbortError, startRecording, type ActiveRecording } from './useRecorder'
 import { cleanErr, type Draft } from './screens1'
 import { fmt, levelAt, newSessionId, plural } from './util'
 import { Shell } from './Shell'
@@ -10,8 +10,10 @@ import Timeline from './Timeline'
 import LiveTrace, { type TracePoint } from './LiveTrace'
 import { devStatus, synthSample, type DevSim } from './devSim'
 
-type Phase = 'consent' | 'camera' | 'baseline' | 'ready' | 'play' | 'saving' | 'save-failed'
+type Phase = 'consent' | 'camera' | 'baseline' | 'ready' | 'play' | 'saving' | 'save-failed' | 'saved'
 const BASELINE_SEC = 30
+/** Fewer face seconds than this in the baseline gets a warning on the Ready screen. */
+const MIN_BASELINE_FACE_SEC = 10
 
 const TIPS = 'Face the screen, light in front of you, shoulders in view, only you in the picture.'
 
@@ -55,10 +57,19 @@ export default function RunFlow({ draft, initialPhase = 'consent', devSim, onCan
   const [saveError, setSaveError] = useState('')
   const [trace, setTrace] = useState<TracePoint[]>([])
   const [tick, setTick] = useState(0)
+  const [hotkeysOk, setHotkeysOk] = useState(true)
+  const [baseFace, setBaseFace] = useState(BASELINE_SEC)
+  const [savedId, setSavedId] = useState('')
 
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const consentAt = useRef('')
   const sensingOn = useRef(false)
+  const mounted = useRef(true)
+  const beginPlayInFlight = useRef(false)
+  const playAbort = useRef<AbortController | null>(null)
+  const camStarting = useRef(false)
+  /** Set when the saved playtest has missing or no reaction data; shown on the "saved" screen before the report. */
+  const dataNotice = useRef('')
   const phaseRef = useRef<Phase>(phase)
   phaseRef.current = phase
   const recording = useRef<ActiveRecording | null>(null)
@@ -107,17 +118,27 @@ export default function RunFlow({ draft, initialPhase = 'consent', devSim, onCan
 
   // Release everything if the flow is left in any way.
   useEffect(() => {
+    mounted.current = true
     return () => {
-      if (sensingOn.current) {
-        sensingOn.current = false
-        void window.senti.sensingStop().catch(() => undefined)
-      }
+      mounted.current = false
+      playAbort.current?.abort() // a recorder still starting stops itself and rejects
+      sensingOn.current = false
+      void window.senti.sensingStop().catch(() => undefined) // idempotent: needed even when sensingOn is false (a start may be in flight)
       void window.senti.hotkeysEnable(false).catch(() => undefined)
+      void window.senti.setBusy(false).catch(() => undefined)
       if (recording.current) void recording.current.stop().catch(() => undefined)
     }
   }, [])
 
+  // Closing the window asks first while a playtest runs or is being saved.
+  const busy = phase === 'play' || phase === 'saving' || phase === 'save-failed'
+  useEffect(() => {
+    void window.senti.setBusy(busy).catch(() => undefined)
+  }, [busy])
+
   const startCamera = useCallback(async () => {
+    if (camStarting.current) return
+    camStarting.current = true
     setStarting(true)
     setStartError('')
     setStatus(null)
@@ -126,34 +147,52 @@ export default function RunFlow({ draft, initialPhase = 'consent', devSim, onCan
         sensingOn.current = false
         await window.senti.sensingStop().catch(() => undefined)
       }
+      if (!mounted.current) return // the unmount cleanup already stopped sensing
       await window.senti.sensingStart()
+      if (!mounted.current) {
+        // Left the flow while the worker was starting: stop what just started.
+        void window.senti.sensingStop().catch(() => undefined)
+        return
+      }
       sensingOn.current = true
       await window.senti.sensingPhase('check')
+      if (!mounted.current) void window.senti.sensingStop().catch(() => undefined)
     } catch (e) {
-      setStartError(cleanErr(e))
+      if (mounted.current) setStartError(cleanErr(e))
+    } finally {
+      camStarting.current = false
+      if (mounted.current) setStarting(false)
     }
-    setStarting(false)
   }, [])
+
+  /** From the baseline or Ready screen: go back to the camera check and restart the camera reader. */
+  function backToCheck(): void {
+    setStartError('')
+    setPhase('camera')
+    if (sensingOn.current) void startCamera()
+  }
 
   // Camera check begins as soon as that phase is entered (never in the dev simulation).
   useEffect(() => {
     if (phase === 'camera' && !sensingOn.current && !devSim) void startCamera()
   }, [phase, startCamera, devSim])
 
-  // Baseline countdown.
+  // Baseline countdown. Paused while the camera reader is in trouble (the Retry on screen restarts the check).
+  const baselineProblem = phase === 'baseline' && (status?.state === 'error' || status?.state === 'busy')
   useEffect(() => {
-    if (phase !== 'baseline') return
+    if (phase !== 'baseline' || baselineProblem) return
     const t0 = Date.now()
     const id = setInterval(() => {
       const left = Math.max(0, BASELINE_SEC - Math.floor((Date.now() - t0) / 1000))
       setBaselineLeft(left)
       if (left === 0) {
         clearInterval(id)
+        setBaseFace(baseSeen.current.filter((x) => x.face).length)
         setPhase('ready')
       }
     }, 250)
     return () => clearInterval(id)
-  }, [phase])
+  }, [phase, baselineProblem])
 
   // Play clock.
   useEffect(() => {
@@ -228,11 +267,23 @@ export default function RunFlow({ draft, initialPhase = 'consent', devSim, onCan
   }
 
   async function beginPlay(): Promise<void> {
+    if (beginPlayInFlight.current) return
+    beginPlayInFlight.current = true
+    const abort = new AbortController()
+    playAbort.current = abort
     setStarting(true)
     setStartError('')
     stopping.current = false
+    let rec: ActiveRecording | null = null
+    // After every await: if the flow was left meanwhile, undo what just resolved and do nothing else.
+    const abandon = async (): Promise<void> => {
+      void window.senti.hotkeysEnable(false).catch(() => undefined)
+      if (rec) await rec.stop().catch(() => undefined)
+      recording.current = null
+    }
     try {
-      const rec = await startRecording(() => void finish())
+      rec = await startRecording(() => void finish(), abort.signal)
+      if (!mounted.current || abort.signal.aborted) return await abandon()
       recording.current = rec
       markers.current = []
       playSeen.current = []
@@ -241,23 +292,31 @@ export default function RunFlow({ draft, initialPhase = 'consent', devSim, onCan
       setMarkerCount(0)
       setElapsed(0)
       await window.senti.sensingPhase('play', rec.startedAtMs)
+      if (!mounted.current) return await abandon()
+      let keysOk = true
       try {
         await window.senti.hotkeysEnable(true)
         setNotice('')
       } catch (e) {
-        setNotice(cleanErr(e))
+        keysOk = false
+        setNotice(`Keyboard shortcuts are unavailable (${cleanErr(e)}). Senti stays on screen; use the Stop button to finish.`)
       }
+      if (!mounted.current) return await abandon()
+      setHotkeysOk(keysOk)
       setPhase('play')
       // Step aside so the game can be in front. The recorder has really started at this point.
-      void window.senti.windowMinimize().catch(() => undefined)
+      // Not when the hotkeys failed: the player would have no way to stop except by finding this window.
+      if (keysOk) void window.senti.windowMinimize().catch(() => undefined)
     } catch (e) {
-      if (recording.current) {
-        await recording.current.stop().catch(() => undefined)
+      if (rec) {
+        await rec.stop().catch(() => undefined)
         recording.current = null
       }
-      setStartError(cleanErr(e))
+      if (mounted.current && !(e instanceof RecorderAbortError)) setStartError(cleanErr(e))
+    } finally {
+      beginPlayInFlight.current = false
+      if (mounted.current) setStarting(false)
     }
-    setStarting(false)
   }
 
   const finish = useCallback(async (): Promise<void> => {
@@ -279,6 +338,26 @@ export default function RunFlow({ draft, initialPhase = 'consent', devSim, onCan
       sensingFailed = true
     }
     sensingOn.current = false
+    let baseline = result.baseline
+    let samples = result.samples
+    let note = ''
+    if (samples.length === 0) {
+      if (playSeen.current.length > 0) {
+        // The camera reader died or timed out without returning its data: use what this window saw live.
+        samples = [...playSeen.current].sort((a, b) => a.t - b.t)
+        if (baseline.length === 0 && baseSeen.current.length > 0) {
+          const n = baseSeen.current.length
+          baseline = baseSeen.current.map((x) => ({ ...x, t: x.t - n })) // last baseline second is t = -1, as in the worker
+        }
+        note = 'Some readings may be missing: the camera reader stopped early.'
+      } else if (sensingFailed) {
+        note = 'The camera reader did not return its readings, so this playtest has no reaction data.'
+      } else {
+        note = 'Senti did not get any camera readings during this playtest, so the report has no reaction data. Check your camera and internet connection before the next one.'
+      }
+    }
+    dataNotice.current = note
+    setNotice(note)
     const session: Session = {
       id: newSessionId(),
       name: draft.name,
@@ -287,8 +366,8 @@ export default function RunFlow({ draft, initialPhase = 'consent', devSim, onCan
       intended: draft.intended,
       beats: draft.beats,
       markers: markers.current.map((t) => ({ t })),
-      baseline: result.baseline,
-      samples: result.samples,
+      baseline,
+      samples,
       playStartedAtMs: rec.startedAtMs,
       playedSec: Math.round(((stoppedAt - rec.startedAtMs) / 1000) * 10) / 10,
       recording: null,
@@ -296,7 +375,6 @@ export default function RunFlow({ draft, initialPhase = 'consent', devSim, onCan
       consent: { acceptedAt: consentAt.current }
     }
     pending.current = { session, blob }
-    if (sensingFailed) setNotice('The camera reader did not return its readings, so this playtest has no reaction data.')
     await save()
   }, [draft]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -309,7 +387,11 @@ export default function RunFlow({ draft, initialPhase = 'consent', devSim, onCan
       const buf = p.blob && p.blob.size > 0 ? await p.blob.arrayBuffer() : null
       await window.senti.sessionsSave(p.session, buf)
       pending.current = null
-      onSaved(p.session.id)
+      if (dataNotice.current) {
+        // Do not drop the user straight into the report: say first that readings are missing.
+        setSavedId(p.session.id)
+        setPhase('saved')
+      } else onSaved(p.session.id)
     } catch (e) {
       setSaveError(cleanErr(e))
       setPhase('save-failed')
@@ -494,7 +576,7 @@ export default function RunFlow({ draft, initialPhase = 'consent', devSim, onCan
   }
 
   if (phase === 'baseline') {
-    const problem = status?.state === 'error' || status?.state === 'busy'
+    const problem = baselineProblem
     return (
       <Shell width="mid">
         <div className="stack-lg enter">
@@ -519,7 +601,12 @@ export default function RunFlow({ draft, initialPhase = 'consent', devSim, onCan
           <p className={problem ? 'error' : 'muted'} aria-live="polite">
             {problem ? status?.message || 'The camera reader hit a problem.' : sample?.face ? 'Face found.' : 'Looking for your face…'}
           </p>
-          <div>
+          <div className="row">
+            {problem && (
+              <button className="btn big" onClick={backToCheck}>
+                Retry
+              </button>
+            )}
             <button className="btn ghost" onClick={cancelAll}>
               Cancel
             </button>
@@ -530,20 +617,57 @@ export default function RunFlow({ draft, initialPhase = 'consent', devSim, onCan
   }
 
   if (phase === 'ready') {
+    const sState = status?.state
+    const readyProblem = sState === 'error' || sState === 'busy'
+    const sensorOk = sState === 'running'
+    const lowFace = baseFace < MIN_BASELINE_FACE_SEC
     return (
       <Shell width="narrow">
         <div className="stack-lg enter">
           <h1>Ready to play</h1>
           <p style={{ fontSize: 17 }}>
-            Senti will record your screen. After you press start, switch to your game. Press <span className="keycap">F8</span> to drop a marker and{' '}
-            <span className="keycap">F9</span> to stop.
+            {hotkeysOk ? (
+              <>
+                Senti will record your screen. After you press start, switch to your game. Press <span className="keycap">F8</span> to drop a marker and{' '}
+                <span className="keycap">F9</span> to stop.
+              </>
+            ) : (
+              <>Senti will record your screen. Keyboard shortcuts are not available, so Senti stays on screen. Use its Stop button to finish.</>
+            )}
           </p>
+          {lowFace && (
+            <div className="stack">
+              <p className="notice" role="alert">
+                Senti barely saw your face during the baseline. Redo it for a better report.
+              </p>
+              <div>
+                <button className="btn" disabled={starting || !sensorOk} onClick={() => void beginBaseline()}>
+                  Redo baseline
+                </button>
+              </div>
+            </div>
+          )}
+          {readyProblem && (
+            <p className="error" role="alert">
+              {status?.message || 'The camera reader hit a problem.'}
+            </p>
+          )}
+          {!readyProblem && !sensorOk && !starting && (
+            <p className="t2" aria-live="polite">
+              Waiting for the camera reader…
+            </p>
+          )}
           {starting && <p className="t2" aria-live="polite">Starting the recorder…</p>}
           {startError && !starting && <p className="error" role="alert">{startError}</p>}
           <div className="row">
-            <button className="btn primary big" disabled={starting} onClick={() => void beginPlay()}>
+            <button className="btn primary big" disabled={starting || !sensorOk} onClick={() => void beginPlay()}>
               {starting ? 'Starting the recorder…' : startError ? 'Retry' : 'Start playtest'}
             </button>
+            {readyProblem && (
+              <button className="btn big" disabled={starting} onClick={backToCheck}>
+                Retry
+              </button>
+            )}
             <button className="btn ghost" onClick={cancelAll}>
               Cancel
             </button>
@@ -580,11 +704,13 @@ export default function RunFlow({ draft, initialPhase = 'consent', devSim, onCan
               </div>
             </div>
             <div className="row" style={{ gap: 16 }}>
-              <span className="muted small">
-                <span className="keycap">F8</span> drops a marker
-              </span>
+              {hotkeysOk && (
+                <span className="muted small">
+                  <span className="keycap">F8</span> drops a marker
+                </span>
+              )}
               <button className="btn primary big" onClick={() => void finish()}>
-                Stop (F9)
+                {hotkeysOk ? 'Stop (F9)' : 'Stop'}
               </button>
             </div>
           </div>
@@ -618,7 +744,7 @@ export default function RunFlow({ draft, initialPhase = 'consent', devSim, onCan
               <div className="v">{level}</div>
             </div>
             <div className="stat">
-              <div className="k">Markers (F8)</div>
+              <div className="k">{hotkeysOk ? 'Markers (F8)' : 'Markers'}</div>
               <div className="v">{markerCount}</div>
             </div>
             <div className="stat">
@@ -657,6 +783,22 @@ export default function RunFlow({ draft, initialPhase = 'consent', devSim, onCan
           <h1>Saving…</h1>
           <p className="t2">Writing the recording and readings to this computer. Please wait.</p>
           {notice && <p className="notice">{notice}</p>}
+        </div>
+      </Shell>
+    )
+  }
+
+  if (phase === 'saved') {
+    return (
+      <Shell width="narrow">
+        <div className="stack-lg enter">
+          <h1>Saved</h1>
+          <p className="notice" role="alert">{notice}</p>
+          <div>
+            <button className="btn primary big" onClick={() => onSaved(savedId)}>
+              Open report
+            </button>
+          </div>
         </div>
       </Shell>
     )

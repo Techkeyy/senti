@@ -28,27 +28,39 @@ function workerEnv(): NodeJS.ProcessEnv {
 }
 
 const STOP_TIMEOUT_MS = 12_000
-const CRASH_MESSAGE = 'The camera reader stopped unexpectedly. Press Retry.'
+// There is no Retry during play, so the message says what is true for the current phase.
+const CRASH_RETRY = 'The camera reader stopped unexpectedly. Press Retry.'
+const CRASH_PLAY = 'The camera reader stopped unexpectedly. Stop the playtest (F9); your recording is kept.'
 const EMPTY: SensingResult = { baseline: [], samples: [], restarts: 0, signals: [] }
 
 let getWin: () => BrowserWindow | null = () => null
 let worker: UtilityProcess | null = null
 let stopWaiter: ((r: SensingResult) => void) | null = null
+/** One shared stop for concurrent callers. */
+let stopping: Promise<SensingResult> | null = null
+let curPhase: SensingPhase = 'idle'
+let lastState = 'off'
 let previewFrames = 0
 let onEventTap: ((e: SensingEvent) => void) | null = null
 
 const post = (m: ToWorker): void => void worker?.postMessage(m)
 
 function pushEvent(ev: SensingEvent): void {
+  lastState = ev.status.state
   onEventTap?.(ev)
   getWin()?.webContents.send(IPC.sensingEvent, ev)
 }
 
-function startSensing(): void {
+async function startSensing(): Promise<void> {
+  // A worker that is stopping, or sits in error/busy, is not reused: restart it cleanly.
+  if (stopping) await stopping
+  if (worker && (lastState === 'error' || lastState === 'busy')) await stopSensing()
   if (worker) return
   const apiKey = getApiKey()
   if (!apiKey) throw new Error('Add your Presage API key first.')
   previewFrames = 0
+  curPhase = 'idle'
+  lastState = 'starting'
   const w = utilityProcess.fork(join(__dirname, 'sensing-worker.js'), [], { serviceName: 'senti-sensing', env: workerEnv() })
   worker = w
   w.on('message', (m: FromWorker) => {
@@ -67,30 +79,37 @@ function startSensing(): void {
       return
     }
     process.stdout.write(`senti sensing worker exited unexpectedly (code ${code})\n`)
-    pushEvent({ status: { state: 'error', hint: '', ready: false, restarts: 0, message: CRASH_MESSAGE } })
+    pushEvent({ status: { state: 'error', hint: '', ready: false, restarts: 0, message: curPhase === 'play' ? CRASH_PLAY : CRASH_RETRY } })
   })
   post({ type: 'start', apiKey })
 }
 
 function setPhase(phase: SensingPhase, playStartedAtMs?: number): void {
+  curPhase = phase
   post({ type: 'phase', phase, playStartedAtMs })
 }
 
-async function stopSensing(): Promise<SensingResult> {
+function stopSensing(): Promise<SensingResult> {
+  if (stopping) return stopping
   const w = worker
-  if (!w) return EMPTY
-  const result = await new Promise<SensingResult>((resolve) => {
-    const timer = setTimeout(() => resolve(EMPTY), STOP_TIMEOUT_MS)
-    stopWaiter = (r) => {
-      clearTimeout(timer)
-      resolve(r)
-    }
-    w.postMessage({ type: 'stop' } satisfies ToWorker)
+  if (!w) return Promise.resolve(EMPTY)
+  stopping = (async () => {
+    const result = await new Promise<SensingResult>((resolve) => {
+      const timer = setTimeout(() => resolve(EMPTY), STOP_TIMEOUT_MS)
+      stopWaiter = (r) => {
+        clearTimeout(timer)
+        resolve(r)
+      }
+      w.postMessage({ type: 'stop' } satisfies ToWorker)
+    })
+    stopWaiter = null
+    if (worker === w) worker = null
+    setTimeout(() => w.kill(), 1500) // the worker exits by itself after replying; this is the backstop
+    return result
+  })().finally(() => {
+    stopping = null
   })
-  stopWaiter = null
-  if (worker === w) worker = null
-  setTimeout(() => w.kill(), 1500) // the worker exits by itself after replying; this is the backstop
-  return result
+  return stopping
 }
 
 async function selfTest(seconds: number): Promise<void> {
@@ -101,7 +120,7 @@ async function selfTest(seconds: number): Promise<void> {
   onEventTap = (e) => {
     last = `state=${e.status.state} hint="${e.status.hint}" ready=${e.status.ready} restarts=${e.status.restarts}`
   }
-  startSensing()
+  await startSensing()
   const dbg = setInterval(() => log(`  [selftest] t=${Math.round((Date.now() - t0) / 1000)}s ${last} frames=${previewFrames}`), 2000)
   setPhase('check')
   await wait(Math.min(10_000, seconds * 500))
@@ -137,7 +156,7 @@ export async function devStartSensingUntilRunning(maxMs: number): Promise<string
     state = e.status.state
     prevTap?.(e)
   }
-  startSensing()
+  await startSensing()
   setPhase('baseline')
   const t0 = Date.now()
   while (state !== 'running' && Date.now() - t0 < maxMs) await new Promise((r) => setTimeout(r, 250))
