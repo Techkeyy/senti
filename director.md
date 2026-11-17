@@ -246,7 +246,7 @@ This is the handover document. A new director should be able to take over from t
     - The probe shows `kCreditExhausted` on every start.
     - The last playtest ("jump scare", 14:08) had 29.9 pkt/s and 0 restarts, but landmarks were frozen (speed 0 every second) and talking was absent, while expressions varied. Likely related to the credits running out. UNVERIFIED; treat that run as INVALID.
     - Fix shipped: fatal SDK errors (2 auth, 4 credits, 13 metric not authorized) stop rebuilding and show a plain message. Verified: state=error, 0 restarts (before: 15 rebuilds in 55 s).
-    - **Owner action needed:** ask on the Presage Discord for extra credits (the contest page says to do exactly this). Do NOT create a second account.
+    - **RESOLVED 17 Nov 18:43 local:** Presage (Bobby H, Discord #sdk-support DM) raised the credits to **1000**. Rule from Presage: credits are not consumed until metrics start, then 1 credit every 30 s (a 5-min session is about 11 credits; each SDK rebuild starts a new metrics stream). The director verified the key works again with a 30 s probe.
     - **Credit budget from now:** one clean playtest, the n=2 session and the demo recording. No more exploratory camera tests.
 
 **Gotchas learned:**
