@@ -236,6 +236,12 @@ This is the handover document. A new director should be able to take over from t
     - **Process rule:** never run camera tests while the owner may be using Senti.
     - **Conclusion so far:** on the owner laptop the SDK falls below its ~25 fps floor during video playback and self-stops. Decision pending: a clean lean test vs a faster PC for the demo.
 
+22. **Owner: only this laptop is available (17 Nov).**
+    - Measured pairs: Presage+video OK, Presage+recording OK, all three FAIL.
+    - **Fix: the sensing worker runs at `PRIORITY_HIGH`** (`os.setPriority`, no admin needed). Probe under the full load (480p video + 640x360@5 recording + face-only): **30.0 pkt/s steady for 90 s, 0 restarts**, while the recording kept producing 6 to 8 chunks per run.
+    - Committed; the worker reports priority -14 via SENTI_PACKAGE_CHECK.
+    - Next: a real playtest in Senti to confirm the 80% face gate.
+
 **Gotchas learned:**
 - The permission handler must allow both `media` and `display-capture`.
 - The electron postinstall may skip the binary download; fix with `node node_modules/electron/install.js`.

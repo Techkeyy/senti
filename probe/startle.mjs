@@ -63,6 +63,7 @@ async function rebuild() {
   rebuilding = false;
 }
 
+if (process.env.STARTLE_PRIO) { const os = await import('node:os'); os.setPriority(0, os.constants.priority.PRIORITY_HIGH); console.log('priority', os.getPriority(0)); }
 build();
 console.log('\n========== NOW: SETTLE (sit still, video paused) ==========\n');
 setInterval(() => {

@@ -75,6 +75,14 @@ let apiKey = ''
 let sdk: SmartSpectraSDK | null = null
 let token = 0
 let on = false
+/** Set by an error a restart cannot fix (credits, key). Cleared when sensing starts again. */
+let fatalError = false
+// SmartSpectraErrorCode values: kAuthenticationFailed = 2, kCreditExhausted = 4, kMetricNotAuthorized = 13.
+const FATAL_ERRORS: Record<number, string> = {
+  2: 'Presage did not accept your API key. Check it in Settings.',
+  4: 'Your Presage measurement credits are used up. Ask Presage for more (their Discord is linked from the challenge page), then try again.',
+  13: 'Your Presage key is not allowed to read face signals. Check your Presage plan.'
+}
 let state: SensingState = 'off'
 let message: string | undefined
 let restarts = 0
@@ -252,8 +260,16 @@ function build(): void {
       void rebuild()
     }
   })
-  s.on('error', () => {
-    /* surfaced through processingStatus; keep the listener so the SDK never throws an unhandled 'error' */
+  s.on('error', (code) => {
+    // Fatal codes apply whichever instance reports them, so the token is not checked here.
+    // Errors a restart cannot fix: stop and tell the user instead of rebuilding forever
+    // (seen 17 Nov: kCreditExhausted produced 15 rebuilds in 55 s with no data).
+    const fatal = FATAL_ERRORS[code]
+    if (fatal) {
+      fatalError = true
+      state = 'error'
+      message = fatal
+    }
   })
   try {
     const cams = SmartSpectraSDK.availableCameras()
@@ -276,7 +292,7 @@ async function teardown(o: SmartSpectraSDK): Promise<void> {
 }
 
 async function rebuild(): Promise<void> {
-  if (rebuilding || !on) return
+  if (rebuilding || !on || fatalError) return
   rebuilding = true
   state = 'recovering'
   const old = sdk
@@ -284,7 +300,7 @@ async function rebuild(): Promise<void> {
   sdk = null
   if (old) await teardown(old)
   await new Promise((r) => setTimeout(r, 500))
-  if (on) {
+  if (on && !fatalError) {
     restarts++
     build()
   }
@@ -312,6 +328,7 @@ function startSensing(): void {
   on = true
   restarts = 0
   rebuilding = false
+  fatalError = false
   state = 'starting'
   message = undefined
   baseline = []
