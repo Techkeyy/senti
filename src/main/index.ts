@@ -4,6 +4,7 @@ import { registerRecorder } from './recorder'
 import { registerSettings } from './settings'
 import { registerSensing } from './sensing'
 import { registerSessions, registerSessionSchemes } from './sessions'
+import { registerDev } from './dev'
 
 let mainWindow: BrowserWindow | null = null
 const getWindow = (): BrowserWindow | null => mainWindow
@@ -38,10 +39,11 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
-  registerRecorder()
+  registerRecorder(getWindow)
   registerSettings()
   registerSensing(getWindow)
   registerSessions(getWindow)
+  registerDev(getWindow)
 
 
   createWindow()

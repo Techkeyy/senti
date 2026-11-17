@@ -3,7 +3,7 @@ import Report from './Report'
 import RunFlow from './RunFlow'
 import { Home, KeyScreen, NewPlaytest, Settings, type Draft } from './screens1'
 import { defaultCurve } from './util'
-import { seekTest } from './dev'
+import { recordTest, seekTest } from './dev'
 
 type View =
   | { name: 'loading' }
@@ -11,13 +11,13 @@ type View =
   | { name: 'home' }
   | { name: 'settings' }
   | { name: 'new' }
-  | { name: 'run'; draft: Draft; phase?: 'consent' | 'camera' }
+  | { name: 'run'; draft: Draft; phase?: 'consent' | 'camera' | 'ready' }
   | { name: 'report'; id: string }
 
-const DEMO: Draft = { name: 'Demo', plannedSec: 300, intended: defaultCurve(300), beats: [], sourceId: 'screen:0:0', sourceName: 'Demo window' }
+const DEMO: Draft = { name: 'Demo', plannedSec: 300, intended: defaultCurve(300), beats: [] }
 
 /** "#dev-..." hashes are set by main only under SENTI_* dev flags (screenshot walk, self tests). */
-function devView(hash: string): View | 'seektest' | null {
+function devView(hash: string): View | 'seektest' | 'recordtest' | null {
   if (!hash.startsWith('#dev-')) return null
   const h = hash.slice(5)
   if (h === 'key') return { name: 'key' }
@@ -26,6 +26,8 @@ function devView(hash: string): View | 'seektest' | null {
   if (h === 'settings') return { name: 'settings' }
   if (h === 'consent') return { name: 'run', draft: DEMO, phase: 'consent' }
   if (h === 'camera') return { name: 'run', draft: DEMO, phase: 'camera' }
+  if (h === 'ready') return { name: 'run', draft: DEMO, phase: 'ready' }
+  if (h === 'recordtest') return 'recordtest'
   if (h.startsWith('report:')) return { name: 'report', id: h.slice(7) }
   if (h === 'seektest') return 'seektest'
   return null
@@ -47,6 +49,7 @@ export default function App() {
     const apply = (): void => {
       const d = devView(window.location.hash)
       if (d === 'seektest') void seekTest()
+      else if (d === 'recordtest') void recordTest()
       else if (d) setView(d)
     }
     if (window.location.hash.startsWith('#dev-')) apply()

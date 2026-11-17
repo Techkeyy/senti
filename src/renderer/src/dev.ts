@@ -1,5 +1,6 @@
 // Dev-only helpers, reachable only through a "#dev-..." URL hash set by main under SENTI_* env flags.
 import { newSessionId, primeDuration } from './util'
+import { startRecording } from './useRecorder'
 import type { Session } from '../../shared/session'
 
 const log = (o: unknown): void => console.log('SENTI_SEEKTEST ' + JSON.stringify(o))
@@ -82,4 +83,24 @@ export async function seekTest(): Promise<void> {
   }
   await window.senti.sessionsDelete(id).catch(() => undefined)
   log(res)
+}
+
+/** SENTI_RECORD_SELFTEST: the real startRecording() path for 10 s while main has the camera reader running. */
+export async function recordTest(): Promise<void> {
+  const res: Record<string, unknown> = {}
+  try {
+    const t0 = Date.now()
+    const rec = await startRecording(() => undefined)
+    res.startedWithinMs = Date.now() - t0
+    res.timing = rec.timing
+    await new Promise((r) => setTimeout(r, 10_000))
+    res.chunks = rec.chunkCount()
+    const blob = await rec.stop()
+    res.bytes = blob.size
+    res.pass = (res.chunks as number) >= 8
+  } catch (e) {
+    res.pass = false
+    res.error = (e as Error).message
+  }
+  console.log('SENTI_RECORD_SELFTEST ' + JSON.stringify(res))
 }

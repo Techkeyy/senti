@@ -175,6 +175,18 @@ This is the handover document. A new director should be able to take over from t
 
     Limit: n = 1 person, one session (state this in the README). **The load-bearing assumption is proven for the behaviour-based felt curve.** The trace is in `probe/logs/` (gitignored).
 
+16. **First UAT attempt (17 Nov): recorder failed.**
+    - Attempt 1: AbortError. The display-media handler could not find the saved window id, so it called `callback({})`.
+    - Attempt 2: the window was found, but "The recorder did not start". Root-caused with isolated tests:
+      - capture of a window covered by another window gives ~4 frames in 5 s;
+      - with Presage processing a face (separate process), full-HD screen capture starves (2 chunks in 6 s), 1280x720@10 gives 7, and **960x540@8 fps at 1 Mbps gives 10 (healthy)**;
+      - with Presage idle, full HD is healthy.
+    - Presage in a separate Node process ran 27 to 30 fps with 0 restarts, the best yet.
+    - **Decisions:**
+      - (a) run sensing in an Electron `utilityProcess`, off the main thread;
+      - (b) record the **entire primary screen** at 960x540, 8 fps, 1 Mbps. Remove the window picker; Senti minimizes itself at play start and restores at stop. Consent copy now says the screen is recorded during play.
+      - (c) wait for the first data chunk (up to 15 s) before declaring failure.
+
 **Gotchas learned:**
 - The permission handler must allow both `media` and `display-capture`.
 - The electron postinstall may skip the binary download; fix with `node node_modules/electron/install.js`.

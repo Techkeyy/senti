@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { CaptureSource, SessionSummary } from '../../shared/ipc'
+import type { SessionSummary } from '../../shared/ipc'
 import type { Beat, IntendedPoint } from '../../shared/session'
 import CurveEditor from './CurveEditor'
 import { defaultCurve, fmt, parseTime, rescaleCurve } from './util'
@@ -11,8 +11,6 @@ export interface Draft {
   plannedSec: number
   intended: IntendedPoint[]
   beats: Beat[]
-  sourceId: string
-  sourceName: string
 }
 
 /** Link opened by main in the external browser (main allows only the Presage https host). */
@@ -235,25 +233,6 @@ export function NewPlaytest({ onCancel, onContinue }: { onCancel: () => void; on
   const [beatLabel, setBeatLabel] = useState('')
   const [beatTime, setBeatTime] = useState('')
   const [beatError, setBeatError] = useState('')
-  const [sources, setSources] = useState<CaptureSource[] | null>(null)
-  const [srcError, setSrcError] = useState('')
-  const [sourceId, setSourceId] = useState('')
-
-  async function loadSources(): Promise<void> {
-    setSources(null)
-    setSrcError('')
-    try {
-      const list = await window.senti.listSources()
-      setSources(list)
-      setSourceId((cur) => (list.some((s) => s.id === cur) ? cur : ''))
-    } catch (e) {
-      setSrcError(`Could not list windows: ${cleanErr(e)}`)
-      setSources([])
-    }
-  }
-  useEffect(() => {
-    void loadSources()
-  }, [])
 
   function commitMinutes(): void {
     const n = Number(minutesText)
@@ -280,8 +259,7 @@ export function NewPlaytest({ onCancel, onContinue }: { onCancel: () => void; on
     setBeatError('')
   }
 
-  const src = sources?.find((s) => s.id === sourceId)
-  const canContinue = name.trim().length > 0 && !!src
+  const canContinue = name.trim().length > 0
 
   return (
     <div className="page stack">
@@ -316,27 +294,8 @@ export function NewPlaytest({ onCancel, onContinue }: { onCancel: () => void; on
         </div>
       </div>
 
-      <div className="card stack">
-        <h2>Game window to record</h2>
-        {sources === null && <p className="dim">Looking for windows…</p>}
-        {srcError && <p className="error">{srcError}</p>}
-        {sources !== null && sources.length === 0 && !srcError && <p className="dim">No windows found. Open your game, then refresh.</p>}
-        {sources !== null && sources.length > 0 && (
-          <div className="sources">
-            {sources.map((s) => (
-              <button key={s.id} className={`source${s.id === sourceId ? ' sel' : ''}`} onClick={() => setSourceId(s.id)} aria-pressed={s.id === sourceId}>
-                <img src={s.thumbnail} alt="" />
-                <div className="sname" title={s.name}>
-                  {s.kind === 'screen' ? 'Screen: ' : ''}
-                  {s.name}
-                </div>
-              </button>
-            ))}
-          </div>
-        )}
-        <div>
-          <button onClick={() => void loadSources()}>Refresh list</button>
-        </div>
+      <div className="card">
+        <p style={{ margin: 0 }}>Senti records your screen while you play. Put your game on this screen.</p>
       </div>
 
       <div className="card stack">
@@ -379,11 +338,11 @@ export function NewPlaytest({ onCancel, onContinue }: { onCancel: () => void; on
         <button
           className="primary"
           disabled={!canContinue}
-          onClick={() => onContinue({ name: name.trim(), plannedSec, intended, beats, sourceId, sourceName: src?.name ?? '' })}
+          onClick={() => onContinue({ name: name.trim(), plannedSec, intended, beats })}
         >
           Continue
         </button>
-        {!canContinue && <span className="dim">Add a name and pick a window to continue.</span>}
+        {!canContinue && <span className="dim">Add a name to continue.</span>}
       </div>
     </div>
   )

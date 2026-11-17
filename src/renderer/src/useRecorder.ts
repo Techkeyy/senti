@@ -1,49 +1,90 @@
 export interface ActiveRecording {
-  /** Epoch ms at the moment MediaRecorder actually started. */
+  /** Epoch ms at the moment MediaRecorder actually started (onstart). */
   startedAtMs: number
+  /** Non-empty data chunks received so far. */
+  chunkCount(): number
+  /** ms from the call: capture granted, MediaRecorder onstart, first data chunk. For diagnostics. */
+  timing: { captureMs: number; onstartMs: number; firstDataMs: number }
   /** Stops recording, releases the capture and returns the webm. */
   stop(): Promise<Blob>
 }
 
+/** Light settings measured to stay healthy while the camera reader runs on a 2-core laptop. */
+const CAPTURE = { frameRate: 8, width: 960, height: 540 }
+const FIRST_DATA_TIMEOUT_MS = 30_000
+
+export class RecorderStartError extends Error {}
+
+export const RECORDER_START_FAILED =
+  'The screen recorder could not start. Close other screen recorders or heavy apps and try again.'
+
 /**
- * Records the source chosen with window.senti.selectSource(); main grants it in the display-media handler.
- * Resolves once MediaRecorder reports it started. onEnded fires if the captured window goes away.
+ * Records the whole primary screen (main grants it in the display-media handler, no picker).
+ * Resolves only when the first non-empty data chunk has arrived, within 30 s (cold starts on slow laptops measured ~11 to 15 s). startedAtMs comes from onstart.
+ * onEnded fires if the capture ends by itself.
  */
-export async function startRecording(sourceId: string, onEnded: () => void): Promise<ActiveRecording> {
-  await window.senti.selectSource(sourceId)
+export async function startRecording(onEnded: () => void): Promise<ActiveRecording> {
+  const t0 = Date.now()
+  let captureMs = 0
+  let onstartMs = 0
+  let firstDataMs = 0
   let stream: MediaStream
   try {
-    stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false })
-  } catch (e) {
-    throw new Error(`Could not capture that window (${(e as Error).name}). Pick it again and retry.`)
+    stream = await navigator.mediaDevices.getDisplayMedia({ video: CAPTURE, audio: false })
+  } catch {
+    throw new RecorderStartError(RECORDER_START_FAILED)
   }
+  captureMs = Date.now() - t0
+  const release = (): void => stream.getTracks().forEach((t) => t.stop())
   // vp8 is lighter on the CPU than vp9, which matters while the camera reader is running.
   const mimeType = ['video/webm;codecs=vp8', 'video/webm'].find((m) => MediaRecorder.isTypeSupported(m))
-  const rec = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 2_500_000 })
-  const chunks: Blob[] = []
-  rec.ondataavailable = (e) => {
-    if (e.data.size > 0) chunks.push(e.data)
+  let rec: MediaRecorder
+  try {
+    rec = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 1_000_000 })
+  } catch {
+    release()
+    throw new RecorderStartError(RECORDER_START_FAILED)
   }
-  const release = (): void => stream.getTracks().forEach((t) => t.stop())
-  const startedAtMs = await new Promise<number>((resolve, reject) => {
+  const chunks: Blob[] = []
+  let startedAtMs = 0
+  const firstData = new Promise<void>((resolve, reject) => {
     const timer = setTimeout(() => {
+      try {
+        if (rec.state !== 'inactive') rec.stop()
+      } catch {
+        /* already stopped */
+      }
       release()
-      reject(new Error('The recorder did not start.'))
-    }, 8000)
+      reject(new RecorderStartError(RECORDER_START_FAILED))
+    }, FIRST_DATA_TIMEOUT_MS)
     rec.onstart = () => {
-      clearTimeout(timer)
-      resolve(Date.now())
+      startedAtMs = Date.now()
+      onstartMs = startedAtMs - t0
+    }
+    rec.ondataavailable = (e) => {
+      if (e.data.size > 0) {
+        chunks.push(e.data)
+        if (chunks.length === 1) {
+          clearTimeout(timer)
+          firstDataMs = Date.now() - t0
+          resolve()
+        }
+      }
     }
     rec.onerror = () => {
       clearTimeout(timer)
       release()
-      reject(new Error('The recorder failed to start.'))
+      reject(new RecorderStartError(RECORDER_START_FAILED))
     }
     rec.start(1000)
   })
+  await firstData
+  if (!startedAtMs) startedAtMs = Date.now() // onstart is not guaranteed to be seen before data; fall back to now
   stream.getVideoTracks()[0]?.addEventListener('ended', onEnded)
   return {
     startedAtMs,
+    chunkCount: () => chunks.length,
+    timing: { captureMs, onstartMs, firstDataMs },
     stop: () =>
       new Promise<Blob>((resolve) => {
         const finish = (): void => {

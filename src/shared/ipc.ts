@@ -1,6 +1,6 @@
 export const IPC = {
-  listSources: 'recorder:list-sources',
-  selectSource: 'recorder:select-source',
+  windowMinimize: 'window:minimize',
+  windowRestore: 'window:restore',
   // Product API (contract owned by the director; see src/shared/session.ts)
   keyStatus: 'key:status',
   keySet: 'key:set',
@@ -27,16 +27,11 @@ export interface SessionSummary {
   hasRecording: boolean
 }
 
-export interface CaptureSource {
-  id: string
-  name: string
-  kind: 'screen' | 'window'
-  thumbnail: string
-}
-
 export interface SentiApi {
-  listSources(): Promise<CaptureSource[]>
-  selectSource(id: string): Promise<void>
+  /** Minimizes the Senti window so the game can be in front while recording. */
+  windowMinimize(): Promise<void>
+  /** Restores and focuses the Senti window. */
+  windowRestore(): Promise<void>
   // Product API
   keyStatus(): Promise<{ hasKey: boolean }>
   keySet(key: string): Promise<{ hasKey: boolean }>

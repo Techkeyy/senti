@@ -8,8 +8,8 @@ function subscribe<T>(channel: string, cb: (v: T) => void): () => void {
 }
 
 const api: SentiApi = {
-  listSources: () => ipcRenderer.invoke(IPC.listSources),
-  selectSource: (id) => ipcRenderer.invoke(IPC.selectSource, id),
+  windowMinimize: () => ipcRenderer.invoke(IPC.windowMinimize),
+  windowRestore: () => ipcRenderer.invoke(IPC.windowRestore),
 
   keyStatus: () => ipcRenderer.invoke(IPC.keyStatus),
   keySet: (key) => ipcRenderer.invoke(IPC.keySet, key),

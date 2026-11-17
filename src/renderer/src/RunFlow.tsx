@@ -135,7 +135,7 @@ export default function RunFlow({ draft, initialPhase = 'consent', onCancel, onS
     setStartError('')
     stopping.current = false
     try {
-      const rec = await startRecording(draft.sourceId, () => void finish())
+      const rec = await startRecording(() => void finish())
       recording.current = rec
       markers.current = []
       setMarkerCount(0)
@@ -148,6 +148,8 @@ export default function RunFlow({ draft, initialPhase = 'consent', onCancel, onS
         setNotice(cleanErr(e))
       }
       setPhase('play')
+      // Step aside so the game can be in front. The recorder has really started at this point.
+      void window.senti.windowMinimize().catch(() => undefined)
     } catch (e) {
       if (recording.current) {
         await recording.current.stop().catch(() => undefined)
@@ -164,6 +166,7 @@ export default function RunFlow({ draft, initialPhase = 'consent', onCancel, onS
     stopping.current = true
     setPhase('saving')
     setSaveError('')
+    void window.senti.windowRestore().catch(() => undefined)
     const stoppedAt = Date.now()
     void window.senti.hotkeysEnable(false).catch(() => undefined)
     const blob = await rec.stop()
@@ -240,7 +243,7 @@ export default function RunFlow({ draft, initialPhase = 'consent', onCancel, onS
         <div className="card">
           <ul style={{ margin: 0, paddingLeft: 20 }} className="stack">
             <li>Senti uses your webcam to notice reactions (head movement, talking, facial expression) while you play.</li>
-            <li>It records the game window, not your face. Camera video is never saved or uploaded.</li>
+            <li>It records your screen while you play, never your face. Camera video is never saved or uploaded.</li>
             <li>
               Readings stay on this computer. Presage’s SDK checks the API key online and, per Presage’s documentation,
               may send short number summaries (never video) to Presage.
@@ -329,13 +332,14 @@ export default function RunFlow({ draft, initialPhase = 'consent', onCancel, onS
       <div className="page narrow stack">
         <h1>Ready to play</h1>
         <p>
-          Senti will record “{draft.sourceName}”. After you press start, switch to your game. Press F8 to drop a marker
-          and F9 to stop. Senti can be minimized.
+          Senti will record your screen. After you press start, switch to your game. Press F8 to drop a marker and F9
+          to stop.
         </p>
-        {startError && <p className="error">{startError}</p>}
+        {starting && <p className="dim">Starting the recorder…</p>}
+        {startError && !starting && <p className="error">{startError}</p>}
         <div className="row">
           <button className="primary big" disabled={starting} onClick={() => void beginPlay()}>
-            {starting ? 'Starting…' : 'Start playtest'}
+            {starting ? 'Starting the recorder…' : startError ? 'Retry' : 'Start playtest'}
           </button>
           <button onClick={cancelAll}>Cancel</button>
         </div>
