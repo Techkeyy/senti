@@ -64,6 +64,7 @@ async function rebuild() {
   rebuilding = false;
 }
 
+if (process.env.SOAK_PRIO) { const os = await import('node:os'); os.setPriority(0, os.constants.priority.PRIORITY_HIGH); console.log('priority set to', os.getPriority(0)); }
 build();
 if (plan.length) console.log(`\n========== NOW: ${seg.toUpperCase()} ==========\n`);
 setInterval(() => {

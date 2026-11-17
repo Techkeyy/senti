@@ -14,10 +14,21 @@
 //   face centre when nobody is in view, observed on this laptop), and no kNoFaceFound validation that second.
 import { SmartSpectraSDK, CameraSelection, MetricType, ProcessingStatus } from '@smartspectra/node-sdk'
 import { decodeMetrics } from '@smartspectra/node-sdk/messages'
+import { constants, getPriority, setPriority } from 'node:os'
 import type { PreviewFrame, SecondSample, SensingEvent, SensingPhase, SensingState } from '../shared/session'
 import type { FromWorker, SensingResult, ToWorker } from './sensing-protocol'
 
 const parentPort = process.parentPort
+
+// Presage stops itself below ~25 fps. On a 2-core laptop with a game (or video) and the screen recorder
+// running, it fell to 0 to 14 fps and restarted every ~20 s. At high priority it held 30 fps with 0
+// restarts under the same load, while the recorder and the video gave way slightly (measured 17 Nov).
+// HIGH is allowed without admin rights on Windows; failing to set it is not fatal.
+try {
+  setPriority(0, constants.priority.PRIORITY_HIGH)
+} catch {
+  /* keep normal priority */
+}
 const send = (m: FromWorker): void => parentPort.postMessage(m)
 
 const SIGNALS = ['head motion', 'talking', 'expressions']
@@ -387,7 +398,7 @@ parentPort.on('message', (e) => {
     if (m.type === 'packageCheck') {
       // Dev-only (SENTI_PACKAGE_CHECK): proves the SDK and its native runtime load. Enumerates cameras, never opens one.
       const cams = SmartSpectraSDK.availableCameras()
-      send({ type: 'packageCheck', info: { ok: true, version: SmartSpectraSDK.version, cameras: cams.length } })
+      send({ type: 'packageCheck', info: { ok: true, version: SmartSpectraSDK.version, cameras: cams.length, priority: getPriority(0) } })
     } else if (m.type === 'start') {
       apiKey = m.apiKey
       startSensing()

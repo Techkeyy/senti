@@ -224,6 +224,18 @@ This is the handover document. A new director should be able to take over from t
     - Moments: the tension timeline (report and home mini-curves) and live monitor traces (camera check, baseline, play).
     - Rationale for desktop recorded: Presage has no web SDK (iOS, Android, C++, Node/Electron only); the rules make public hosting optional; distribution = Windows installer on GitHub Releases.
 
+21. **17 Nov afternoon.**
+    - **Redesign committed** (04842b0); the director reviewed the screenshots. Known flaw: a beat label clips under the drag tooltip in the editor.
+    - **Installer committed** (f651b66): NSIS 163 MB. The SDK loads from the installed app via `SMARTSPECTRA_CAPI_PATH` pointing at `app.asar.unpacked`. SENTI_PACKAGE_CHECK ok when unpacked and installed. Camera flow on the packaged build is UNVERIFIED.
+    - **UAT attempt 4 (480p windowed + light recording):** play face 33/185 played seconds (18%), 6 pkt/s, 5 restarts, a 93 s gap. FAIL.
+    - **Attempt 5 ("jumpscare 4", 2:04):** CORRECTED, it is a VALID run. The timestamps prove there was no overlap: play 12:39:35 to 12:41:39 UTC, and the director's lean test started ~12:45.
+      - Result: 4 flinches detected; play face 13/124 s in two bursts; 0 to 14 pkt/s; 4 restarts with gaps.
+      - Baseline at 20 to 31 pkt/s but face=false every second (likely "no face found", e.g. the owner looking away while setting up the video).
+      - Verdict: still starved during video playback. FAIL on the 80% gate.
+    - The lean-metrics test (landmarks+talking at 640x480, ~12:45, no overlap): 1 to 7 pkt/s, 2 restarts. Lean sensing did NOT help.
+    - **Process rule:** never run camera tests while the owner may be using Senti.
+    - **Conclusion so far:** on the owner laptop the SDK falls below its ~25 fps floor during video playback and self-stops. Decision pending: a clean lean test vs a faster PC for the demo.
+
 **Gotchas learned:**
 - The permission handler must allow both `media` and `display-capture`.
 - The electron postinstall may skip the binary download; fix with `node node_modules/electron/install.js`.
