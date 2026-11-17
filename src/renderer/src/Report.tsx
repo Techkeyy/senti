@@ -131,7 +131,21 @@ export default function Report({ id, onBack }: { id: string; onBack: () => void 
             controls
             preload="metadata"
             onLoadedMetadata={(e) => void primeDuration(e.currentTarget)}
-            onError={() => setVideoError('The recording could not be played.')}
+            onError={(e) => {
+              // Seen once right after saving (the window restoring, the camera reader shutting down) but not
+              // reproducible when reopening the report. Log the exact cause, retry once, then tell the truth.
+              const v = e.currentTarget
+              console.log(`SENTI_VIDEO_ERROR code=${v.error?.code} msg=${v.error?.message ?? ''} retried=${v.dataset.retried ?? 'no'}`)
+              if (!v.dataset.retried) {
+                v.dataset.retried = 'yes'
+                setTimeout(() => {
+                  v.src = `${window.senti.sessionVideoUrl(session.id)}?r=${Date.now()}`
+                  v.load()
+                }, 1500)
+                return
+              }
+              setVideoError('The recording could not be played.')
+            }}
           />
           {videoError && <p className="error">{videoError}</p>}
         </>

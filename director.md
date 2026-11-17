@@ -187,6 +187,13 @@ This is the handover document. A new director should be able to take over from t
       - (b) record the **entire primary screen** at 960x540, 8 fps, 1 Mbps. Remove the window picker; Senti minimizes itself at play start and restores at stop. Consent copy now says the screen is recorded during play.
       - (c) wait for the first data chunk (up to 15 s) before declaring failure.
 
+17. **Recorder fix shipped (17 Nov, commit 3f07d6c).**
+    - Sensing now runs in a utilityProcess (`src/main/sensing-worker.ts`).
+    - Recording is the whole primary screen at 960x540, 8 fps, 1 Mbps; the window picker is removed; Senti minimizes at play start and restores at stop.
+    - Recording counts as started only on the first data chunk (timeout raised to 30 s by the director after a measured 10.7 s cold start); Retry skips consent, camera check and baseline.
+    - Builder selftests: 6 runs, 7 to 9 chunks per 10 s. Director re-ran it: 9 chunks, 191 KB, pass.
+    - UNVERIFIED: the full app flow with a face in view (next: owner UAT).
+
 **Gotchas learned:**
 - The permission handler must allow both `media` and `display-capture`.
 - The electron postinstall may skip the binary download; fix with `node node_modules/electron/install.js`.

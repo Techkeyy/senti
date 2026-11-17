@@ -42,6 +42,7 @@ function build() {
     const b = m.breathing?.rate?.at(-1); if (b) breath = b;
   });
   sdk.on('validationStatus', (code, ts, hint) => { if (my === token && code) win.valid[hint] = (win.valid[hint] ?? 0) + 1; });
+  if (process.env.SOAK_VIDEO) sdk.on('videoOutput', () => {});
   sdk.on('error', (code, msg) => { if (my === token) win.errors.push(code); });
   sdk.on('processingStatus', (st) => { if (my === token && st === ProcessingStatus.kError) rebuild(); });
   sdk.useCamera(CameraSelection.byId(camId), process.env.SOAK_RES ? { width: Number(process.env.SOAK_RES.split("x")[0]), height: Number(process.env.SOAK_RES.split("x")[1]) } : undefined);

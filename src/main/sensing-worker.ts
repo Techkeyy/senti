@@ -231,14 +231,7 @@ function build(): void {
       if (code === 1 && acc) acc.noFace = true
     }
   })
-  s.on('videoOutput', (buf, w, h, stride, fmt) => {
-    if (my !== token) return
-    try {
-      handleVideo(buf, w, h, stride, fmt)
-    } catch {
-      /* ignore */
-    }
-  })
+  setPreviewListener(s, phase === 'check')
   s.on('processingStatus', (st) => {
     if (my !== token) return
     if (st === ProcessingStatus.kRunning) {
@@ -329,8 +322,31 @@ function startSensing(): void {
   }, 1000)
 }
 
+/**
+ * Preview frames are only needed on the camera-check screen. While a videoOutput listener exists the SDK
+ * hands every camera frame to JS, which cut face processing from ~28 to ~5 fps on the owner's 2-core laptop
+ * (measured 17 Nov). So the listener exists only in phase 'check'. The SDK (pinned 3.5.0) has no off();
+ * its listeners live in a private Map, which is deleted from directly.
+ */
+function setPreviewListener(s: SmartSpectraSDK, on: boolean): void {
+  if (on) {
+    const my = token
+    s.on('videoOutput', (buf, w, h, stride, fmt) => {
+      if (my !== token) return
+      try {
+        handleVideo(buf, w, h, stride, fmt)
+      } catch {
+        /* ignore */
+      }
+    })
+  } else {
+    ;(s as unknown as { _listeners?: Map<string, unknown> })._listeners?.delete('videoOutput')
+  }
+}
+
 function setPhase(p: SensingPhase, playStartedAtMs?: number): void {
   if (p === phase) return
+  if (sdk) setPreviewListener(sdk, p === 'check')
   flushAcc()
   if (p === 'baseline') {
     phaseOrigin = Date.now()
