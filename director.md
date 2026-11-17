@@ -249,6 +249,18 @@ This is the handover document. A new director should be able to take over from t
     - **RESOLVED 17 Nov 18:43 local:** Presage (Bobby H, Discord #sdk-support DM) raised the credits to **1000**. Rule from Presage: credits are not consumed until metrics start, then 1 credit every 30 s (a 5-min session is about 11 credits; each SDK rebuild starts a new metrics stream). The director verified the key works again with a 30 s probe.
     - **Credit budget from now:** one clean playtest, the n=2 session and the demo recording. No more exploratory camera tests.
 
+24. **Red-team audit (critical-bug skill, MODE A, 17 Nov evening): OVERALL FAIL, safe to demo from HEAD.**
+    - P0 RB-1: the installer (13:55) predates PRIORITY_HIGH (14:01) and the fatal-error fix (15:17). Verified by the director.
+    - P1:
+      - B1: Cancel during recorder start leaks the recorder, hotkeys and minimize. The director verified the code.
+      - B2: Retry then Cancel leaks the worker. The director verified the code.
+      - B3: a worker crash or stop timeout silently saves empty data.
+      - B4: no sensor gate before baseline/Ready.
+      - B5: unbounded rebuild loop and no idle stop.
+    - P2: menu/DevTools in prod, single instance, close mid-play, hotkey failure still minimizes, busy copy, error boundary, README/LICENSE/SDK redistribution check, consent storage/retention/telemetry copy.
+    - **Approved fix list dispatched to a builder.** Do-not-touch: felt.ts, recorder params, priority approach.
+    - After the fixes: rebuild the installer from HEAD, then a fresh-install full journey with the owner.
+
 **Gotchas learned:**
 - The permission handler must allow both `media` and `display-capture`.
 - The electron postinstall may skip the binary download; fix with `node node_modules/electron/install.js`.
