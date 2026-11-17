@@ -103,7 +103,7 @@ This is the handover document. A new director should be able to take over from t
 | --- | --- | --- |
 | New project | started during 4 to 22 Nov | PASS (repo created 16 Nov) |
 | SDK + live signal | SmartSpectra in a working app, one or more live signals | PENDING |
-| Public repo + setup instructions | | PENDING |
+| Public repo + setup instructions | https://github.com/Techkeyy/senti (public, created 17 Nov; key scan of full history: 0 matches) | Repo PASS, setup instructions PENDING (README) |
 | Demo video showing the live signal | | PENDING |
 | DEV post from the template, tags `devchallenge, presagechallenge` | | PENDING |
 | Consent and Data Handling section (storage, retention, deletion, telemetry, AI use) | | PENDING |
