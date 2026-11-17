@@ -1,8 +1,14 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Camera, Check, HardDrive, Info, Keyboard, MonitorPlay, User } from 'lucide-react'
 import type { SecondSample, SensingStatus, Session } from '../../shared/session'
+import { computeReport } from '../../shared/felt'
 import { startRecording, type ActiveRecording } from './useRecorder'
 import { cleanErr, type Draft } from './screens1'
-import { fmt, levelAt, newSessionId } from './util'
+import { fmt, levelAt, newSessionId, plural } from './util'
+import { Shell } from './Shell'
+import Timeline from './Timeline'
+import LiveTrace, { type TracePoint } from './LiveTrace'
+import { devStatus, synthSample, type DevSim } from './devSim'
 
 type Phase = 'consent' | 'camera' | 'baseline' | 'ready' | 'play' | 'saving' | 'save-failed'
 const BASELINE_SEC = 30
@@ -12,13 +18,33 @@ const TIPS = 'Face the screen, light in front of you, shoulders in view, only yo
 interface Props {
   draft: Draft
   initialPhase?: Phase
+  /** Dev screenshots only: synthetic readings, and the camera is never opened. */
+  devSim?: DevSim
   onCancel: () => void
   onSaved: (id: string) => void
 }
 
-export default function RunFlow({ draft, initialPhase = 'consent', onCancel, onSaved }: Props) {
+/** Keeps one sample per whole second, the later one winning, like the report does. */
+function upsert(list: SecondSample[], s: SecondSample): void {
+  const k = Math.floor(s.t)
+  const i = list.findIndex((x) => Math.floor(x.t) === k)
+  if (i >= 0) list[i] = s
+  else list.push(s)
+}
+
+function Ring({ on }: { on: boolean }) {
+  return (
+    <svg className={`ring${on ? ' on' : ''}`} width={44} height={44} viewBox="0 0 44 44" aria-hidden="true">
+      <circle className="ring-bg" cx={22} cy={22} r={18} fill="none" strokeWidth={3} />
+      <circle className="ring-fg" cx={22} cy={22} r={18} fill="none" strokeWidth={3} strokeLinecap="round" pathLength={100} transform="rotate(-90 22 22)" />
+      {on && <Check x={14} y={14} size={16} strokeWidth={1.75} color="var(--pos)" className="ring-check" />}
+    </svg>
+  )
+}
+
+export default function RunFlow({ draft, initialPhase = 'consent', devSim, onCancel, onSaved }: Props) {
   const [phase, setPhase] = useState<Phase>(initialPhase)
-  const [status, setStatus] = useState<SensingStatus | null>(null)
+  const [status, setStatus] = useState<SensingStatus | null>(() => (devSim && initialPhase === 'camera' ? devStatus(devSim) : null))
   const [sample, setSample] = useState<SecondSample | null>(null)
   const [startError, setStartError] = useState('')
   const [starting, setStarting] = useState(false)
@@ -27,6 +53,8 @@ export default function RunFlow({ draft, initialPhase = 'consent', onCancel, onS
   const [markerCount, setMarkerCount] = useState(0)
   const [notice, setNotice] = useState('')
   const [saveError, setSaveError] = useState('')
+  const [trace, setTrace] = useState<TracePoint[]>([])
+  const [tick, setTick] = useState(0)
 
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const consentAt = useRef('')
@@ -37,12 +65,28 @@ export default function RunFlow({ draft, initialPhase = 'consent', onCancel, onS
   const markers = useRef<number[]>([])
   const stopping = useRef(false)
   const pending = useRef<{ session: Session; blob: Blob | null } | null>(null)
+  // Readings seen by this window, only to draw the live strips. The saved ones come from sensingStop.
+  const baseSeen = useRef<SecondSample[]>([])
+  const playSeen = useRef<SecondSample[]>([])
+
+  const ingest = useCallback((s: SecondSample): void => {
+    setSample(s)
+    const ph = phaseRef.current
+    if (ph !== 'baseline' && ph !== 'play') return
+    const v = s.face && s.headSpeedMax !== null ? s.headSpeedMax : null
+    setTrace((prev) => [...prev.slice(-120), { ts: Date.now(), v }])
+    if (ph === 'baseline') upsert(baseSeen.current, s)
+    else {
+      upsert(playSeen.current, s)
+      setTick((n) => n + 1)
+    }
+  }, [])
 
   // Push subscriptions live for the whole flow.
   useEffect(() => {
     const offEvent = window.senti.onSensingEvent((e) => {
       setStatus(e.status)
-      if (e.sample) setSample(e.sample)
+      if (e.sample) ingest(e.sample)
     })
     const offPreview = window.senti.onPreview((f) => {
       const c = canvasRef.current
@@ -59,7 +103,7 @@ export default function RunFlow({ draft, initialPhase = 'consent', onCancel, onS
       offEvent()
       offPreview()
     }
-  }, [])
+  }, [ingest])
 
   // Release everything if the flow is left in any way.
   useEffect(() => {
@@ -91,10 +135,10 @@ export default function RunFlow({ draft, initialPhase = 'consent', onCancel, onS
     setStarting(false)
   }, [])
 
-  // Camera check begins as soon as that phase is entered.
+  // Camera check begins as soon as that phase is entered (never in the dev simulation).
   useEffect(() => {
-    if (phase === 'camera' && !sensingOn.current) void startCamera()
-  }, [phase, startCamera])
+    if (phase === 'camera' && !sensingOn.current && !devSim) void startCamera()
+  }, [phase, startCamera, devSim])
 
   // Baseline countdown.
   useEffect(() => {
@@ -120,9 +164,62 @@ export default function RunFlow({ draft, initialPhase = 'consent', onCancel, onS
     return () => clearInterval(id)
   }, [phase])
 
+  // Dev simulation of the live screens: seeded history, then one synthetic reading per second.
+  useEffect(() => {
+    if (!devSim || (phase !== 'baseline' && phase !== 'play')) return
+    const now = Date.now()
+    if (phase === 'baseline') {
+      baseSeen.current = []
+      const seed: TracePoint[] = []
+      for (let i = 0; i < 14; i++) {
+        const s = synthSample(i - BASELINE_SEC)
+        s.headSpeedMax = s.face ? 0.1 + 0.12 * Math.abs(Math.sin(i * 1.3)) : null
+        baseSeen.current.push(s)
+        seed.push({ ts: now - (14 - i) * 1000, v: s.headSpeedMax })
+      }
+      setTrace(seed)
+      setSample(baseSeen.current[13])
+      let n = 14
+      const id = setInterval(() => {
+        const s = synthSample(n - BASELINE_SEC)
+        s.headSpeedMax = 0.1 + 0.12 * Math.abs(Math.sin(n * 1.3))
+        n++
+        ingest(s)
+      }, 1000)
+      return () => clearInterval(id)
+    }
+    const START = 134
+    baseSeen.current = []
+    for (let i = -30; i < 0; i++) baseSeen.current.push({ ...synthSample(i), headSpeedMax: 0.1 + 0.12 * Math.abs(Math.sin(i * 1.3)) })
+    playSeen.current = []
+    const seed: TracePoint[] = []
+    for (let t = 0; t < START; t++) {
+      const s = synthSample(t)
+      playSeen.current.push(s)
+      if (t >= START - 60) seed.push({ ts: now - (START - t) * 1000, v: s.face ? s.headSpeedMax : null })
+    }
+    setTrace(seed)
+    setTick((x) => x + 1)
+    setSample(playSeen.current[START - 1])
+    setStatus({ state: 'running', hint: '', ready: true, restarts: 0 })
+    setMarkerCount(2)
+    markers.current = [72, 118]
+    setElapsed(START)
+    let t = START
+    const id = setInterval(() => {
+      ingest(synthSample(t))
+      t++
+      setElapsed(t)
+    }, 1000)
+    return () => clearInterval(id)
+  }, [devSim, phase, ingest])
+
   async function beginBaseline(): Promise<void> {
     try {
       await window.senti.sensingPhase('baseline')
+      baseSeen.current = []
+      setTrace([])
+      setSample(null)
       setBaselineLeft(BASELINE_SEC)
       setPhase('baseline')
     } catch (e) {
@@ -138,6 +235,9 @@ export default function RunFlow({ draft, initialPhase = 'consent', onCancel, onS
       const rec = await startRecording(() => void finish())
       recording.current = rec
       markers.current = []
+      playSeen.current = []
+      setTrace([])
+      setSample(null)
       setMarkerCount(0)
       setElapsed(0)
       await window.senti.sensingPhase('play', rec.startedAtMs)
@@ -233,44 +333,87 @@ export default function RunFlow({ draft, initialPhase = 'consent', onCancel, onS
     onCancel()
   }
 
+  // The same report model as the finished report, run on what has arrived so far. Flinch marks therefore
+  // use exactly the rule in felt.ts.
+  const live = useMemo(() => {
+    if (phase !== 'play') return null
+    const partial = {
+      id: 'live',
+      name: draft.name,
+      createdAt: '',
+      plannedSec: draft.plannedSec,
+      intended: draft.intended,
+      beats: draft.beats,
+      markers: [],
+      baseline: baseSeen.current,
+      samples: playSeen.current,
+      playStartedAtMs: 0,
+      playedSec: 0,
+      recording: null,
+      sensing: { restarts: 0, signals: [] },
+      consent: { acceptedAt: '' }
+    } as Session
+    try {
+      return computeReport(partial)
+    } catch {
+      return null
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, tick, draft])
+
   // ---------- screens ----------
 
   if (phase === 'consent') {
+    const items: Array<[typeof Camera, string]> = [
+      [Camera, 'Senti uses your webcam to notice reactions (head movement, talking, facial expression) while you play.'],
+      [MonitorPlay, 'It records your screen while you play, never your face. Camera video is never saved or uploaded.'],
+      [
+        HardDrive,
+        'Readings stay on this computer. Presage’s SDK checks the API key online and, per Presage’s documentation, may send short number summaries (never video) to Presage.'
+      ],
+      [User, 'Only you should be in view.'],
+      [Keyboard, 'Stop any time with F9 or the Stop button.'],
+      [Info, 'Senti is not a medical device.']
+    ]
     return (
-      <div className="page narrow stack">
-        <h1>Before you play</h1>
-        <p className="dim">This is for the person who will play. Please read it.</p>
-        <div className="card">
-          <ul style={{ margin: 0, paddingLeft: 20 }} className="stack">
-            <li>Senti uses your webcam to notice reactions (head movement, talking, facial expression) while you play.</li>
-            <li>It records your screen while you play, never your face. Camera video is never saved or uploaded.</li>
-            <li>
-              Readings stay on this computer. Presage’s SDK checks the API key online and, per Presage’s documentation,
-              may send short number summaries (never video) to Presage.
-            </li>
-            <li>Only you should be in view.</li>
-            <li>Stop any time with F9 or the Stop button.</li>
-            <li>Senti is not a medical device.</li>
-          </ul>
+      <Shell width="mid">
+        <div className="stack-lg enter">
+          <div className="stack">
+            <h1>Before you play</h1>
+            <p className="t2">This is for the person who will play. Please read it.</p>
+          </div>
+          <div className="card">
+            <ul className="consent-list">
+              {items.map(([Icon, text], i) => (
+                <li key={i}>
+                  <Icon size={16} strokeWidth={1.5} aria-hidden="true" />
+                  <span>{text}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div className="row">
+            <button
+              className="btn primary big"
+              onClick={() => {
+                consentAt.current = new Date().toISOString()
+                setPhase('camera')
+              }}
+            >
+              I agree, start camera
+            </button>
+            <button className="btn ghost" onClick={cancelAll}>
+              Cancel
+            </button>
+          </div>
         </div>
-        <div className="row">
-          <button
-            className="primary"
-            onClick={() => {
-              consentAt.current = new Date().toISOString()
-              setPhase('camera')
-            }}
-          >
-            I agree, start camera
-          </button>
-          <button onClick={cancelAll}>Cancel</button>
-        </div>
-      </div>
+      </Shell>
     )
   }
 
   if (phase === 'camera') {
     const state = status?.state
+    const hint = status?.hint ?? ''
     let message = ''
     if (startError) message = startError
     else if (starting || !status || state === 'starting') message = 'Starting the camera…'
@@ -279,148 +422,268 @@ export default function RunFlow({ draft, initialPhase = 'consent', onCancel, onS
     else if (state === 'recovering') message = 'Reconnecting the camera reader…'
     else if (!status.ready && !status.hint) message = 'Finding your face…'
     const problem = !!startError || state === 'busy' || state === 'error'
+    const running = state === 'running' && !problem
+    // Each item ticks only from what the SDK really reported.
+    const noFace = /no face/i.test(hint)
+    const checks: Array<[string, boolean]> = [
+      ['Camera on', running],
+      ['Face found', running && !noFace],
+      ['Framing and light OK', running && hint === ''],
+      ['Holding steady', running && !!status?.ready]
+    ]
+    const ready = !!status?.ready && !problem
     return (
-      <div className="page stack">
-        <h1>Camera check</h1>
-        <div className="row" style={{ alignItems: 'flex-start', gap: 24 }}>
-          <canvas ref={canvasRef} className="camera" width={320} height={240} aria-label="Your camera preview" />
-          <div style={{ flex: 1, minWidth: 260 }} className="stack">
-            {status?.hint && !problem && <div className="hint">{status.hint}</div>}
-            {message && <p className={problem ? 'error' : 'dim'} style={{ fontSize: 18 }}>{message}</p>}
-            {status?.ready && !problem && <p className="ok" style={{ fontSize: 18 }}>Looking good. You can start.</p>}
-            <p className="dim">{TIPS}</p>
-            <p className="dim" style={{ fontSize: 'var(--fs-label)' }}>
-              This preview stays on screen only. It is not saved.
-            </p>
+      <Shell>
+        <div className="stack-lg enter">
+          <h1>Camera check</h1>
+          <div className="check-grid">
+            <div className="viewport">
+              <canvas ref={canvasRef} width={320} height={240} aria-label="Your camera preview" />
+              <svg className="guide" viewBox="0 0 400 300" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+                <path fillRule="evenodd" fill="rgba(7,8,12,0.4)" d="M0 0H400V300H0Z M200 40 a82 108 0 1 0 0.01 0Z" />
+                <ellipse cx={200} cy={148} rx={82} ry={108} fill="none" stroke={ready ? 'var(--pos)' : 'var(--text)'} strokeOpacity={ready ? 0.9 : 0.5} strokeWidth={2} strokeDasharray={ready ? undefined : '6 6'} />
+                <path d="M12 36V12H36 M364 12H388V36 M388 264V288H364 M36 288H12V264" fill="none" stroke="var(--text)" strokeOpacity={0.5} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </div>
+            <div className="stack-lg">
+              <div className="row" style={{ alignItems: 'flex-start', gap: 16, flexWrap: 'nowrap' }}>
+                <Ring on={ready} />
+                <div aria-live="polite" style={{ flex: 1 }}>
+                  {status?.hint && !problem && <div className="hint-big">{status.hint}</div>}
+                  {message && (
+                    <div className={`hint-big${problem ? ' error' : ' t2'}`} role={problem ? 'alert' : undefined}>
+                      {message}
+                    </div>
+                  )}
+                  {ready && <div className="hint-big ok">Looking good. You can start.</div>}
+                </div>
+              </div>
+              <ul className="checklist" aria-label="Camera check">
+                {checks.map(([label, on]) => (
+                  <li key={label} className={on ? 'on' : ''}>
+                    <span className="tick" aria-hidden="true">
+                      {on && <Check size={12} strokeWidth={2.5} />}
+                    </span>
+                    <span>{label}</span>
+                    <span className="sr-only">{on ? 'done' : 'not yet'}</span>
+                  </li>
+                ))}
+              </ul>
+              <div className="stack">
+                <p className="t2">{TIPS}</p>
+                <p className="muted small">This preview stays on screen only. It is not saved.</p>
+              </div>
+            </div>
+          </div>
+          <div className="row">
+            <button className="btn primary big" disabled={!status?.ready || problem} onClick={() => void beginBaseline()}>
+              Start baseline
+            </button>
+            {problem && (
+              <button className="btn big" disabled={starting} onClick={() => void startCamera()}>
+                Retry
+              </button>
+            )}
+            <button className="btn ghost" onClick={cancelAll}>
+              Cancel
+            </button>
           </div>
         </div>
-        <div className="row">
-          <button className="primary" disabled={!status?.ready || problem} onClick={() => void beginBaseline()}>
-            Start baseline
-          </button>
-          {problem && (
-            <button disabled={starting} onClick={() => void startCamera()}>
-              Retry
-            </button>
-          )}
-          <button onClick={cancelAll}>Cancel</button>
-        </div>
-      </div>
+      </Shell>
     )
   }
 
   if (phase === 'baseline') {
+    const problem = status?.state === 'error' || status?.state === 'busy'
     return (
-      <div className="page narrow stack">
-        <h1>Baseline</h1>
-        <p style={{ fontSize: 18 }}>Sit still and look at the screen for 30 seconds. This learns your normal.</p>
-        <div className="timer">{fmt(baselineLeft)}</div>
-        <p className="dim">
-          {status?.state === 'error' || status?.state === 'busy'
-            ? status.message || 'The camera reader hit a problem.'
-            : sample?.face
-              ? 'Face found.'
-              : 'Looking for your face…'}
-        </p>
-        <button onClick={cancelAll}>Cancel</button>
-      </div>
+      <Shell width="mid">
+        <div className="stack-lg enter">
+          <div className="row spread" style={{ alignItems: 'flex-end' }}>
+            <div className="stack">
+              <h1>Baseline</h1>
+              <p style={{ fontSize: 18 }}>Sit still and look at the screen. Senti is learning your normal</p>
+            </div>
+            <div className="countdown" aria-label="Time left">
+              {fmt(baselineLeft)}
+            </div>
+          </div>
+          <div className="stack">
+            <div className="row spread">
+              <span className="t2 small">Head motion, live</span>
+              <span className="mono muted small">last {BASELINE_SEC} s</span>
+            </div>
+            <div className="monitor">
+              <LiveTrace points={trace} windowSec={BASELINE_SEC} live={!problem} height={128} max={2} label="Live head motion from the camera. Gaps mean no reading." />
+            </div>
+          </div>
+          <p className={problem ? 'error' : 'muted'} aria-live="polite">
+            {problem ? status?.message || 'The camera reader hit a problem.' : sample?.face ? 'Face found.' : 'Looking for your face…'}
+          </p>
+          <div>
+            <button className="btn ghost" onClick={cancelAll}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      </Shell>
     )
   }
 
   if (phase === 'ready') {
     return (
-      <div className="page narrow stack">
-        <h1>Ready to play</h1>
-        <p>
-          Senti will record your screen. After you press start, switch to your game. Press F8 to drop a marker and F9
-          to stop.
-        </p>
-        {starting && <p className="dim">Starting the recorder…</p>}
-        {startError && !starting && <p className="error">{startError}</p>}
-        <div className="row">
-          <button className="primary big" disabled={starting} onClick={() => void beginPlay()}>
-            {starting ? 'Starting the recorder…' : startError ? 'Retry' : 'Start playtest'}
-          </button>
-          <button onClick={cancelAll}>Cancel</button>
+      <Shell width="narrow">
+        <div className="stack-lg enter">
+          <h1>Ready to play</h1>
+          <p style={{ fontSize: 17 }}>
+            Senti will record your screen. After you press start, switch to your game. Press <span className="keycap">F8</span> to drop a marker and{' '}
+            <span className="keycap">F9</span> to stop.
+          </p>
+          {starting && <p className="t2" aria-live="polite">Starting the recorder…</p>}
+          {startError && !starting && <p className="error" role="alert">{startError}</p>}
+          <div className="row">
+            <button className="btn primary big" disabled={starting} onClick={() => void beginPlay()}>
+              {starting ? 'Starting the recorder…' : startError ? 'Retry' : 'Start playtest'}
+            </button>
+            <button className="btn ghost" onClick={cancelAll}>
+              Cancel
+            </button>
+          </div>
         </div>
-      </div>
+      </Shell>
     )
   }
 
   if (phase === 'play') {
     const level = Math.round(levelAt(draft.intended, elapsed))
-    const motion = sample?.headSpeedMax ?? 0
-    const sensingProblem = status && (status.state === 'error' || status.state === 'busy')
+    const sensingProblem = !!status && (status.state === 'error' || status.state === 'busy')
+    const flinches = live ? live.moments.filter((m) => m.kind === 'startle').length : 0
+    const p95 = live?.baseline.headSpeedP95 ?? 0
+    // Same flinch line as felt.ts: 2 x the baseline 95th percentile, never below 1.0 face-widths per second.
+    const thr = Math.max(1, 2 * p95)
+    const total = Math.max(draft.plannedSec, elapsed)
     return (
-      <div className="page narrow stack">
-        <div className="row spread">
-          <h1>Recording</h1>
-          <div className="timer">
-            {fmt(elapsed)} <span className="dim" style={{ fontSize: 18 }}>of {fmt(draft.plannedSec)}</span>
+      <Shell
+        width="mid"
+        right={
+          <span className="row mono t2 small" style={{ gap: 8 }}>
+            <span className="live-dot" aria-hidden="true" />
+            Recording
+          </span>
+        }
+      >
+        <div className="stack enter">
+          <div className="row spread" style={{ alignItems: 'center' }}>
+            <div className="row" style={{ gap: 24, alignItems: 'baseline' }}>
+              <h1>Playtest running</h1>
+              <div className="mono" style={{ fontSize: 28 }}>
+                {fmt(elapsed)} <span className="t2" style={{ fontSize: 16 }}>of {fmt(draft.plannedSec)}</span>
+              </div>
+            </div>
+            <div className="row" style={{ gap: 16 }}>
+              <span className="muted small">
+                <span className="keycap">F8</span> drops a marker
+              </span>
+              <button className="btn primary big" onClick={() => void finish()}>
+                Stop (F9)
+              </button>
+            </div>
+          </div>
+          <div className="monitor" style={{ padding: '8px 12px 4px' }}>
+            <Timeline
+              variant="live"
+              draw={false}
+              intended={draft.intended}
+              felt={live?.felt ?? []}
+              moments={live?.moments.filter((m) => m.kind === 'startle') ?? []}
+              total={total}
+              now={elapsed}
+              label="Your intended curve, with the player's felt reaction building as readings arrive"
+            />
+          </div>
+          <div className="stack">
+            <div className="row spread">
+              <span className="t2 small">Head motion, last minute</span>
+            </div>
+            <div className="monitor">
+              <LiveTrace points={trace} windowSec={60} live={!sensingProblem} height={96} max={3} threshold={thr} thresholdLabel="Flinch line" label="Live head motion. Gaps mean no reading." />
+            </div>
+          </div>
+          <div className="stat-grid">
+            <div className="stat">
+              <div className="k">Flinches</div>
+              <div className="v key">{flinches}</div>
+            </div>
+            <div className="stat">
+              <div className="k">Intended now</div>
+              <div className="v">{level}</div>
+            </div>
+            <div className="stat">
+              <div className="k">Markers (F8)</div>
+              <div className="v">{markerCount}</div>
+            </div>
+            <div className="stat">
+              <div className="k">Face found</div>
+              <div className="v">{sample ? (sample.face ? 'Yes' : 'No') : 'Waiting'}</div>
+            </div>
+            <div className="stat">
+              <div className="k">Talking</div>
+              <div className="v">{sample ? ((sample.talking ?? 0) > 0.3 ? 'Yes' : 'No') : 'Waiting'}</div>
+            </div>
+            <div className="stat">
+              <div className="k">Camera reader</div>
+              <div className={`v${sensingProblem ? ' error' : ''}`} style={{ fontSize: 16, lineHeight: '28px' }}>
+                {status ? status.state : 'Waiting'}
+              </div>
+            </div>
+            <div className="stat">
+              <div className="k">Restarts</div>
+              <div className="v">{status?.restarts ?? 0}</div>
+            </div>
+          </div>
+          {sensingProblem && status?.message && <p className="error">{status.message}</p>}
+          {notice && <p className="notice">{notice}</p>}
+          <div className="sr-only" aria-live="polite">
+            {sensingProblem ? `Camera reader ${status?.state}. ${status?.message ?? ''}` : ''} {plural(markerCount, 'marker', 'markers')}. {plural(flinches, 'flinch', 'flinches')}.
           </div>
         </div>
-        <div className="card kv">
-          <div>Intended level now</div>
-          <div>{level}</div>
-          <div>Head motion</div>
-          <div className="bar" aria-label="Head motion">
-            <div style={{ width: `${Math.min(100, motion * 40)}%` }} />
-          </div>
-          <div>Talking</div>
-          <div>
-            <span className={`dot${sample && (sample.talking ?? 0) > 0.3 ? ' on' : ''}`} />
-          </div>
-          <div>Face found</div>
-          <div>{sample ? (sample.face ? 'Yes' : 'No') : 'Waiting for data'}</div>
-          <div>Camera reader</div>
-          <div className={sensingProblem ? 'error' : ''}>
-            {status ? status.state + (status.message && sensingProblem ? `: ${status.message}` : '') : 'Waiting'}
-          </div>
-          <div>Restarts</div>
-          <div>{status?.restarts ?? 0}</div>
-          <div>Markers</div>
-          <div>{markerCount}</div>
-        </div>
-        {notice && <p className="notice">{notice}</p>}
-        <div>
-          <button className="primary big" onClick={() => void finish()}>
-            Stop (F9)
-          </button>
-        </div>
-      </div>
+      </Shell>
     )
   }
 
   if (phase === 'saving') {
     return (
-      <div className="page narrow stack">
-        <h1>Saving…</h1>
-        <p className="dim">Writing the recording and readings to this computer. Please wait.</p>
-        {notice && <p className="notice">{notice}</p>}
-      </div>
+      <Shell width="narrow">
+        <div className="stack-lg enter" aria-live="polite">
+          <h1>Saving…</h1>
+          <p className="t2">Writing the recording and readings to this computer. Please wait.</p>
+          {notice && <p className="notice">{notice}</p>}
+        </div>
+      </Shell>
     )
   }
 
   // save-failed
   return (
-    <div className="page narrow stack">
-      <h1>Could not save</h1>
-      <p className="error">{saveError}</p>
-      <p>The playtest is still in memory. Try again, or discard it.</p>
-      <div className="row">
-        <button className="primary" onClick={() => void save()}>
-          Try again
-        </button>
-        <button
-          className="danger"
-          onClick={() => {
-            pending.current = null
-            onCancel()
-          }}
-        >
-          Discard playtest
-        </button>
+    <Shell width="narrow">
+      <div className="stack-lg enter">
+        <h1>Could not save</h1>
+        <p className="error" role="alert">{saveError}</p>
+        <p>The playtest is still in memory. Try again, or discard it.</p>
+        <div className="row">
+          <button className="btn primary" onClick={() => void save()}>
+            Try again
+          </button>
+          <button
+            className="btn danger"
+            onClick={() => {
+              pending.current = null
+              onCancel()
+            }}
+          >
+            Discard playtest
+          </button>
+        </div>
       </div>
-    </div>
+    </Shell>
   )
 }

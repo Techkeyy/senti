@@ -1,25 +1,19 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { MomentKind, Session } from '../../shared/session'
+import { ArrowLeft } from 'lucide-react'
+import type { Session } from '../../shared/session'
 import { computeReport } from '../../shared/felt'
 import { cleanErr } from './screens1'
-import { fmt, primeDuration, tickStep } from './util'
+import { FlinchIcon } from './FlinchMark'
+import { Shell } from './Shell'
+import Timeline from './Timeline'
+import { fmt, fmtDate, plural, primeDuration, totalSec } from './util'
 
-const W = 900
-const H = 300
-const M = { l: 44, r: 16, t: 28, b: 30 }
-const PW = W - M.l - M.r
-const PLOT_BOTTOM = H - M.b
-const LANE_H = 26 // bottom lane for moments
-const PH = H - M.t - M.b - LANE_H
-
-const KIND_LABEL: Record<MomentKind, string> = { startle: 'Startle', voice: 'Voice reaction', lookaway: 'Looked away', freeze: 'Froze' }
-
-function MomentShape({ kind, cx, cy }: { kind: MomentKind; cx: number; cy: number }) {
-  const c = 'var(--felt)'
-  if (kind === 'startle') return <polygon points={`${cx},${cy - 6} ${cx + 6},${cy + 5} ${cx - 6},${cy + 5}`} fill={c} />
-  if (kind === 'voice') return <circle cx={cx} cy={cy} r={5} fill={c} />
-  if (kind === 'lookaway') return <rect x={cx - 5} y={cy - 5} width={10} height={10} fill={c} />
-  return <polygon points={`${cx},${cy - 6} ${cx + 6},${cy} ${cx},${cy + 6} ${cx - 6},${cy}`} fill={c} />
+/** The range is already shown in the left column, so drop it from the front of the sentence when it repeats. */
+function sentence(text: string, start: number, end: number): string {
+  const prefix = `${fmt(start)} to ${fmt(end)}: `
+  if (!text.startsWith(prefix)) return text
+  const rest = text.slice(prefix.length)
+  return rest.charAt(0).toUpperCase() + rest.slice(1)
 }
 
 export default function Report({ id, onBack }: { id: string; onBack: () => void }) {
@@ -28,7 +22,6 @@ export default function Report({ id, onBack }: { id: string; onBack: () => void 
   const [videoError, setVideoError] = useState('')
   const [now, setNow] = useState(0)
   const videoRef = useRef<HTMLVideoElement>(null)
-  const svgRef = useRef<SVGSVGElement>(null)
 
   useEffect(() => {
     window.senti.sessionsGet(id).then(
@@ -72,20 +65,32 @@ export default function Report({ id, onBack }: { id: string; onBack: () => void 
     }
   }, [session])
 
-  if (session === undefined) return <div className="page"><p className="dim">Loading playtest…</p></div>
+  const back = (
+    <button className="btn ghost" onClick={onBack}>
+      <ArrowLeft size={16} aria-hidden="true" />
+      Back to playtests
+    </button>
+  )
+
+  if (session === undefined) {
+    return (
+      <Shell right={back}>
+        <p className="muted">Loading playtest…</p>
+      </Shell>
+    )
+  }
   if (!session || !report) {
     return (
-      <div className="page stack">
-        <h1>Report</h1>
-        <p className="error">{error || 'This playtest could not be found.'}</p>
-        <button onClick={onBack}>Back to playtests</button>
-      </div>
+      <Shell right={back}>
+        <div className="stack">
+          <h1>Report</h1>
+          <p className="error" role="alert">{error || 'This playtest could not be found.'}</p>
+        </div>
+      </Shell>
     )
   }
 
-  const total = Math.max(session.plannedSec, session.playedSec, report.felt.length ? report.felt[report.felt.length - 1].t : 0, 1)
-  const x = (t: number): number => M.l + (Math.min(total, Math.max(0, t)) / total) * PW
-  const y = (level: number): number => M.t + PH - (level / 100) * PH
+  const total = totalSec(session, report)
 
   function seek(t: number): void {
     const v = videoRef.current
@@ -95,138 +100,152 @@ export default function Report({ id, onBack }: { id: string; onBack: () => void 
     setNow(v.currentTime)
   }
 
-  function onChartClick(e: React.MouseEvent): void {
-    const r = svgRef.current!.getBoundingClientRect()
-    const px = ((e.clientX - r.left) / r.width) * W
-    seek(((px - M.l) / PW) * total)
-  }
-
-  const step = tickStep(total)
-  const ticks: number[] = []
-  for (let t = 0; t <= total; t += step) ticks.push(t)
-
-  const intendedPath = session.intended.map((p, i) => `${i ? 'L' : 'M'}${x(p.t)},${y(p.level)}`).join(' ')
-  const feltPath = report.felt.map((p, i) => `${i ? 'L' : 'M'}${x(p.t)},${y(p.level)}`).join(' ')
   const noFelt = report.felt.length === 0
-  const kindsPresent = Array.from(new Set(report.moments.map((m) => m.kind)))
+  const flinches = report.moments.filter((m) => m.kind === 'startle').length
+  const voices = report.moments.filter((m) => m.kind === 'voice').length
+  const lookSec = report.moments.filter((m) => m.kind === 'lookaway').reduce((a, m) => a + m.durationSec, 0)
+  const hasRecording = !!session.recording
 
   return (
-    <div className="page stack">
-      <div className="row spread">
-        <div>
+    <Shell right={back}>
+      <div className="stack-lg">
+        <div className="enter">
           <h1>{session.name}</h1>
-          <div className="dim">
-            {new Date(session.createdAt).toLocaleString()} · {fmt(session.playedSec)} played of {fmt(session.plannedSec)} planned
+          <div className="mono muted small" style={{ marginTop: 6 }}>
+            {fmtDate(session.createdAt)} &middot; {fmt(session.playedSec)} played of {fmt(session.plannedSec)} planned
           </div>
         </div>
-        <button onClick={onBack}>Back to playtests</button>
-      </div>
 
-      {session.recording ? (
-        <>
-          <video
-            ref={videoRef}
-            className="video"
-            src={window.senti.sessionVideoUrl(session.id)}
-            controls
-            preload="metadata"
-            onLoadedMetadata={(e) => void primeDuration(e.currentTarget)}
-            onError={(e) => {
-              // Seen once right after saving (the window restoring, the camera reader shutting down) but not
-              // reproducible when reopening the report. Log the exact cause, retry once, then tell the truth.
-              const v = e.currentTarget
-              console.log(`SENTI_VIDEO_ERROR code=${v.error?.code} msg=${v.error?.message ?? ''} retried=${v.dataset.retried ?? 'no'}`)
-              if (!v.dataset.retried) {
-                v.dataset.retried = 'yes'
-                setTimeout(() => {
-                  v.src = `${window.senti.sessionVideoUrl(session.id)}?r=${Date.now()}`
-                  v.load()
-                }, 1500)
-                return
-              }
-              setVideoError('The recording could not be played.')
-            }}
-          />
-          {videoError && <p className="error">{videoError}</p>}
-        </>
-      ) : (
-        <p className="notice">No recording was saved for this playtest.</p>
-      )}
+        {hasRecording ? (
+          <div className="stack">
+            <div className="video-frame enter d1">
+              <video
+                ref={videoRef}
+                src={window.senti.sessionVideoUrl(session.id)}
+                controls
+                preload="metadata"
+                onLoadedMetadata={(e) => void primeDuration(e.currentTarget)}
+                onError={(e) => {
+                  // Seen once right after saving (the window restoring, the camera reader shutting down) but not
+                  // reproducible when reopening the report. Log the exact cause, retry once, then tell the truth.
+                  const v = e.currentTarget
+                  console.log(`SENTI_VIDEO_ERROR code=${v.error?.code} msg=${v.error?.message ?? ''} retried=${v.dataset.retried ?? 'no'}`)
+                  if (!v.dataset.retried) {
+                    v.dataset.retried = 'yes'
+                    setTimeout(() => {
+                      v.src = `${window.senti.sessionVideoUrl(session.id)}?r=${Date.now()}`
+                      v.load()
+                    }, 1500)
+                    return
+                  }
+                  setVideoError('The recording could not be played.')
+                }}
+              />
+            </div>
+            {videoError && <p className="error" role="alert">{videoError}</p>}
+          </div>
+        ) : (
+          <p className="notice">No recording was saved for this playtest.</p>
+        )}
 
-      <div>
-        <svg ref={svgRef} className="chart" viewBox={`0 0 ${W} ${H}`} onClick={onChartClick} style={{ cursor: 'pointer' }} role="img" aria-label="Intended and felt tension over time. Click to seek the video.">
-          {[0, 25, 50, 75, 100].map((l) => (
-            <g key={l}>
-              <line x1={M.l} x2={W - M.r} y1={y(l)} y2={y(l)} stroke="var(--border)" />
-              <text x={M.l - 8} y={y(l) + 4} textAnchor="end">
-                {l}
-              </text>
-            </g>
-          ))}
-          {ticks.map((t) => (
-            <text key={t} x={x(t)} y={H - 8} textAnchor="middle">
-              {fmt(t)}
-            </text>
-          ))}
-          {session.beats.map((b, i) => (
-            <g key={`b${i}`}>
-              <line x1={x(b.t)} x2={x(b.t)} y1={M.t} y2={PLOT_BOTTOM} stroke="var(--warn)" strokeDasharray="4 4" strokeWidth={1.5} />
-              <text x={x(b.t) + 4} y={M.t - 8} style={{ fill: 'var(--warn)' }}>
-                {b.label}
-              </text>
-            </g>
-          ))}
-          {session.markers.map((m, i) => (
-            <line key={`m${i}`} x1={x(m.t)} x2={x(m.t)} y1={M.t} y2={M.t + 14} stroke="var(--ok)" strokeWidth={3} />
-          ))}
-          <path d={intendedPath} fill="none" stroke="var(--intended)" strokeWidth={2.5} strokeDasharray="8 5" />
-          {!noFelt && <path d={feltPath} fill="none" stroke="var(--felt)" strokeWidth={3} strokeLinejoin="round" />}
-          {report.moments.map((m, i) => (
-            <MomentShape key={i} kind={m.kind} cx={x(m.t)} cy={PLOT_BOTTOM - LANE_H / 2 - 2} />
-          ))}
-          <line x1={x(now)} x2={x(now)} y1={M.t - 4} y2={PLOT_BOTTOM} stroke="var(--text)" strokeWidth={2} />
-        </svg>
-        <div className="legend">
-          <span>
-            <i className="swatch" style={{ borderColor: 'var(--intended)', borderTopStyle: 'dashed' }} /> Intended
-          </span>
-          <span>
-            <i className="swatch" style={{ borderColor: 'var(--felt)' }} /> Felt
-          </span>
-          <span>
-            <i className="swatch" style={{ borderColor: 'var(--warn)', borderTopStyle: 'dashed' }} /> Beat
-          </span>
-          <span>
-            <i className="swatch" style={{ borderColor: 'var(--ok)' }} /> Your marker (F8)
-          </span>
-          {kindsPresent.map((k) => (
-            <span key={k}>
-              <svg width={14} height={14} viewBox="-7 -7 14 14">
-                <MomentShape kind={k} cx={0} cy={0} />
-              </svg>{' '}
-              {KIND_LABEL[k]}
-            </span>
-          ))}
+        <div className="stack enter d2">
+          {!noFelt && (
+            <p className="summary" aria-live="polite">
+              <span className="key">{plural(report.mismatches.length, 'mismatch', 'mismatches')}</span>
+              <span className="sep">&middot;</span>
+              {plural(flinches, 'flinch', 'flinches')}
+              {lookSec > 0 && (
+                <>
+                  <span className="sep">&middot;</span>
+                  player looked away for <span className="mono">{fmt(lookSec)}</span>
+                </>
+              )}
+            </p>
+          )}
+          <div className="chart-card">
+            <Timeline
+              variant="big"
+              intended={session.intended}
+              felt={report.felt}
+              total={total}
+              beats={session.beats}
+              markers={session.markers}
+              moments={report.moments}
+              mismatches={report.mismatches}
+              now={hasRecording ? now : undefined}
+              onSeek={hasRecording ? seek : undefined}
+              label={`Intended and felt tension over time. ${hasRecording ? 'Click to seek the video.' : ''}`}
+            />
+            <div className="legend">
+              <span>
+                <i className="swatch dashed" /> Intended
+              </span>
+              {!noFelt && (
+                <span>
+                  <i className="swatch ember" /> Felt
+                </span>
+              )}
+              {flinches > 0 && (
+                <span>
+                  <FlinchIcon /> Flinch
+                </span>
+              )}
+              {report.mismatches.length > 0 && (
+                <span>
+                  <i className="swatch wash" /> Mismatch
+                </span>
+              )}
+              {lookSec > 0 && (
+                <span>
+                  <i className="swatch band" /> Looked away
+                </span>
+              )}
+              {voices > 0 && (
+                <span>
+                  <svg width={14} height={14} viewBox="0 0 14 14" aria-hidden="true">
+                    <circle cx={7} cy={7} r={4} fill="none" stroke="var(--text2)" strokeWidth={1.5} />
+                  </svg>{' '}
+                  Voice reaction
+                </span>
+              )}
+              {session.beats.length > 0 && (
+                <span>
+                  <svg width={14} height={14} viewBox="0 0 14 14" aria-hidden="true">
+                    <line x1={3} x2={3} y1={1} y2={13} stroke="var(--text)" strokeWidth={1.5} />
+                  </svg>{' '}
+                  Beat
+                </span>
+              )}
+              {session.markers.length > 0 && (
+                <span>
+                  <i className="swatch tick" /> Your marker (F8)
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="stack enter d3">
+          <h2>Where the plan and the player disagreed</h2>
+          {noFelt ? (
+            <p className="mm-empty">No reaction data was captured for this playtest.</p>
+          ) : report.mismatches.length === 0 ? (
+            <p className="mm-empty">No mismatches found: reactions followed your plan.</p>
+          ) : (
+            <div className="mm-list">
+              {report.mismatches.map((m, i) => (
+                <button key={i} className="mm-row" onClick={() => seek(m.start)} disabled={!hasRecording} style={{ cursor: hasRecording ? 'pointer' : 'default' }}>
+                  <span className="when">
+                    {fmt(m.start)} to {fmt(m.end)}
+                  </span>
+                  <span>{sentence(m.text, m.start, m.end)}</span>
+                  <span />
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
-
-      <div className="card">
-        <h2>Where the plan and the player disagreed</h2>
-        {noFelt ? (
-          <p>No reaction data was captured for this playtest.</p>
-        ) : report.mismatches.length === 0 ? (
-          <p>No mismatches found: reactions followed your plan.</p>
-        ) : (
-          report.mismatches.map((m, i) => (
-            <button key={i} className="mismatch" onClick={() => seek(m.start)}>
-              <span className="time">
-                {fmt(m.start)} to {fmt(m.end)}
-              </span>
-              {m.text}
-            </button>
-          ))
-        )}
-      </div>
-    </div>
+    </Shell>
   )
 }

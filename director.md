@@ -215,6 +215,15 @@ This is the handover document. A new director should be able to take over from t
     - **Data:** baseline face 34/36 at 27 pkt/s (the sensing fix works). Play face 11/54 at 8 pkt/s, 4 restarts, 102 s played. With YouTube full-screen HD + screen recording + Presage on 2 cores, Presage starves. This is a hardware/load limit, not a code bug.
     - Options for the owner: lighter content at lower resolution, lighter recording, a faster PC for the demo, and a stated system requirement.
 
+20. **Design direction (17 Nov). The owner handed creative control to the director; decided and briefed to a builder (renderer only).**
+    - Character: watchful, exact, a little dramatic.
+    - World: a dark film-editing suite crossed with a heart monitor; the material is the line.
+    - Ink-graphite surfaces; one ember accent for the felt trace and flinch marks; the intended curve is chalk dashed; mismatch zones are an ember wash.
+    - Geist + Geist Mono bundled locally; lucide icons.
+    - Signature: the flinch mark (spike + dot), used only for detected startles.
+    - Moments: the tension timeline (report and home mini-curves) and live monitor traces (camera check, baseline, play).
+    - Rationale for desktop recorded: Presage has no web SDK (iOS, Android, C++, Node/Electron only); the rules make public hosting optional; distribution = Windows installer on GitHub Releases.
+
 **Gotchas learned:**
 - The permission handler must allow both `media` and `display-capture`.
 - The electron postinstall may skip the binary download; fix with `node node_modules/electron/install.js`.

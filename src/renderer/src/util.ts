@@ -88,3 +88,18 @@ export function primeDuration(video: HTMLVideoElement): Promise<void> {
     setTimeout(done, 4000)
   })
 }
+
+/** Short local date and time, e.g. "Nov 17, 09:24". */
+export function fmtDate(iso: string): string {
+  return new Date(iso).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+}
+
+export function plural(n: number, one: string, many: string): string {
+  return `${n} ${n === 1 ? one : many}`
+}
+
+/** Length of the time axis for a finished session: the longest of planned, played and felt data. */
+export function totalSec(session: { plannedSec: number; playedSec: number }, report: { felt: Array<{ t: number }> }): number {
+  const lastFelt = report.felt.length ? report.felt[report.felt.length - 1].t : 0
+  return Math.max(session.plannedSec, session.playedSec, lastFelt, 1)
+}

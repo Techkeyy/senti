@@ -10,7 +10,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 process.loadEnvFile(path.join(here, '.env'));
 const seconds = Number(process.argv[2] ?? 180);
 const camId = SmartSpectraSDK.availableCameras()[0].id;
-const metrics = process.env.SOAK_FACE_ONLY ? [MetricType.FACE_LANDMARKS, MetricType.BLINKING, MetricType.TALKING, MetricType.EXPRESSIONS] : [MetricType.BREATHING_RATE, MetricType.PULSE_RATE, MetricType.HRV, MetricType.FACE_LANDMARKS,
+const metrics = process.env.SOAK_LEAN ? [MetricType.FACE_LANDMARKS, MetricType.TALKING] : process.env.SOAK_FACE_ONLY ? [MetricType.FACE_LANDMARKS, MetricType.BLINKING, MetricType.TALKING, MetricType.EXPRESSIONS] : [MetricType.BREATHING_RATE, MetricType.PULSE_RATE, MetricType.HRV, MetricType.FACE_LANDMARKS,
   MetricType.BLINKING, MetricType.TALKING, MetricType.EXPRESSIONS];
 
 let sdk = null, token = 0, restarts = 0, rebuilding = false, done = false;

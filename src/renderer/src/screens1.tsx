@@ -1,8 +1,15 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { ArrowLeft, ExternalLink, Monitor, Plus, Settings as SettingsIcon, Trash2 } from 'lucide-react'
 import type { SessionSummary } from '../../shared/ipc'
-import type { Beat, IntendedPoint } from '../../shared/session'
+import type { Beat, IntendedPoint, Report as ReportData, Session } from '../../shared/session'
+import { computeReport } from '../../shared/felt'
 import CurveEditor from './CurveEditor'
-import { defaultCurve, fmt, parseTime, rescaleCurve } from './util'
+import { ExampleTimeline, FaintLine } from './ExampleLine'
+import { Shell } from './Shell'
+import Timeline from './Timeline'
+import { SHAPES, shapePoints, type Shape } from './shapes'
+import { monotone, toPts } from './chart'
+import { defaultCurve, fmt, fmtDate, parseTime, plural, rescaleCurve, totalSec } from './util'
 
 const REGISTER_URL = 'https://physiology.presagetech.com/auth/register'
 
@@ -16,10 +23,17 @@ export interface Draft {
 /** Link opened by main in the external browser (main allows only the Presage https host). */
 function RegisterLink() {
   return (
-    <a href={REGISTER_URL} target="_blank" rel="noreferrer">
+    <a href={REGISTER_URL} target="_blank" rel="noreferrer" className="row" style={{ display: 'inline-flex', gap: 6 }}>
       Get a free key
+      <ExternalLink size={14} strokeWidth={1.5} className="ico" aria-hidden="true" />
     </a>
   )
+}
+
+export function cleanErr(e: unknown): string {
+  const m = e instanceof Error ? e.message : String(e)
+  // Electron prefixes IPC errors with "Error invoking remote method '...': Error: "
+  return m.replace(/^Error invoking remote method '[^']*': (Error: )?/, '')
 }
 
 export function KeyScreen({ onSaved, onCancel }: { onSaved: () => void; onCancel?: () => void }) {
@@ -40,42 +54,47 @@ export function KeyScreen({ onSaved, onCancel }: { onSaved: () => void; onCancel
   }
 
   return (
-    <div className="page narrow stack">
-      <div className="brand">Senti</div>
-      <h1>One quick setup step</h1>
-      <p>Senti reads reactions with Presage SmartSpectra. Paste your free Presage API key.</p>
-      <p>
-        <RegisterLink />
-      </p>
-      <div>
-        <label className="label" htmlFor="key">
-          Presage API key
-        </label>
-        <input
-          id="key"
-          type="password"
-          value={key}
-          autoComplete="off"
-          onChange={(e) => setKey(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && key.trim() && !busy && void save()}
-        />
+    <Shell bare>
+      <div className="key-screen">
+        <FaintLine />
+        <span className="example-tag example-caption">Example</span>
+        <div className="key-body stack-lg enter" style={{ padding: '12vh 32px 0' }}>
+          <div className="stack">
+            <h1>Add your Presage key</h1>
+            <p className="t2">
+              Senti uses your webcam to notice when a playtester startles, talks or looks away, then compares that with the tension you planned.
+            </p>
+          </div>
+          <div className="field">
+            <label htmlFor="key">Presage API key</label>
+            <input
+              id="key"
+              type="password"
+              value={key}
+              autoComplete="off"
+              autoFocus
+              onChange={(e) => setKey(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && key.trim() && !busy && void save()}
+            />
+          </div>
+          {error && <p className="error" role="alert">{error}</p>}
+          <div className="row">
+            <button className="btn primary" disabled={busy || !key.trim()} onClick={() => void save()}>
+              {busy ? 'Saving…' : 'Save'}
+            </button>
+            {onCancel && (
+              <button className="btn ghost" onClick={onCancel}>
+                Cancel
+              </button>
+            )}
+            <span className="grow" />
+            <RegisterLink />
+          </div>
+          <p className="muted small">The key stays on this computer, encrypted by Windows.</p>
+        </div>
       </div>
-      {error && <p className="error">{error}</p>}
-      <div className="row">
-        <button className="primary" disabled={busy || !key.trim()} onClick={() => void save()}>
-          {busy ? 'Saving…' : 'Save key'}
-        </button>
-        {onCancel && <button onClick={onCancel}>Cancel</button>}
-      </div>
-      <p className="dim">The key stays on this computer, encrypted by Windows.</p>
-    </div>
+    </Shell>
   )
-}
-
-export function cleanErr(e: unknown): string {
-  const m = e instanceof Error ? e.message : String(e)
-  // Electron prefixes IPC errors with "Error invoking remote method '...': Error: "
-  return m.replace(/^Error invoking remote method '[^']*': (Error: )?/, '')
 }
 
 export function Settings({ onBack, onKeyRemoved }: { onBack: () => void; onKeyRemoved: () => void }) {
@@ -102,25 +121,74 @@ export function Settings({ onBack, onKeyRemoved }: { onBack: () => void; onKeyRe
   if (replacing) return <KeyScreen onSaved={() => (setReplacing(false), setInfo('Key saved.'), setHasKey(true))} onCancel={() => setReplacing(false)} />
 
   return (
-    <div className="page narrow stack">
-      <div className="row spread">
+    <Shell
+      width="narrow"
+      right={
+        <button className="btn ghost" onClick={onBack}>
+          <ArrowLeft size={16} aria-hidden="true" />
+          Back
+        </button>
+      }
+    >
+      <div className="stack-lg enter">
         <h1>Settings</h1>
-        <button onClick={onBack}>Back</button>
-      </div>
-      <div className="card stack">
-        <h2>Presage API key</h2>
-        <p>{hasKey === null ? 'Checking…' : hasKey ? 'A key is saved on this computer.' : 'No key is saved.'}</p>
-        <div className="row">
-          <button onClick={() => setReplacing(true)}>Replace key</button>
-          <button className="danger" disabled={!hasKey} onClick={() => void remove()}>
-            Remove key
-          </button>
+        <div className="card stack">
+          <h2>Presage API key</h2>
+          <p className="t2">{hasKey === null ? 'Checking…' : hasKey ? 'A key is saved on this computer.' : 'No key is saved.'}</p>
+          <div className="row">
+            <button className="btn" onClick={() => setReplacing(true)}>
+              Replace key
+            </button>
+            <button className="btn danger" disabled={!hasKey} onClick={() => void remove()}>
+              Remove key
+            </button>
+          </div>
+          {info && <p className="ok" role="status">{info}</p>}
+          {error && <p className="error" role="alert">{error}</p>}
         </div>
-        {info && <p className="ok">{info}</p>}
-        {error && <p className="error">{error}</p>}
       </div>
-    </div>
+    </Shell>
   )
+}
+
+interface Loaded {
+  session: Session
+  report: ReportData
+}
+
+function useLoaded(list: SessionSummary[] | null): Record<string, Loaded | 'failed'> {
+  const [loaded, setLoaded] = useState<Record<string, Loaded | 'failed'>>({})
+  useEffect(() => {
+    if (!list) return
+    let live = true
+    for (const s of list) {
+      window.senti.sessionsGet(s.id).then(
+        (session) => {
+          if (!live) return
+          let entry: Loaded | 'failed' = 'failed'
+          if (session) {
+            try {
+              entry = { session, report: computeReport(session) }
+            } catch {
+              entry = 'failed'
+            }
+          }
+          setLoaded((m) => ({ ...m, [s.id]: entry }))
+        },
+        () => live && setLoaded((m) => ({ ...m, [s.id]: 'failed' }))
+      )
+    }
+    return () => {
+      live = false
+    }
+  }, [list])
+  return loaded
+}
+
+export function reportCounts(r: ReportData): string {
+  if (r.felt.length === 0) return 'No reaction data'
+  const flinches = r.moments.filter((m) => m.kind === 'startle').length
+  return `${plural(flinches, 'flinch', 'flinches')} · ${plural(r.mismatches.length, 'mismatch', 'mismatches')}`
 }
 
 export function Home({
@@ -136,6 +204,7 @@ export function Home({
   const [error, setError] = useState('')
   const [confirm, setConfirm] = useState<SessionSummary | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const loaded = useLoaded(list)
 
   async function load(): Promise<void> {
     try {
@@ -149,6 +218,15 @@ export function Home({
   useEffect(() => {
     void load()
   }, [])
+
+  useEffect(() => {
+    if (!confirm) return
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape' && !deleting) setConfirm(null)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [confirm, deleting])
 
   async function doDelete(): Promise<void> {
     if (!confirm) return
@@ -164,63 +242,115 @@ export function Home({
     setDeleting(false)
   }
 
+  const empty = list !== null && list.length === 0 && !error
+
   return (
-    <div className="page stack">
-      <div className="topbar">
-        <div className="brand">Senti</div>
-        <div className="row">
-          <button onClick={onSettings}>Settings</button>
-          <button className="primary" onClick={onNew}>
+    <Shell
+      right={
+        <button className="btn ghost" onClick={onSettings}>
+          <SettingsIcon size={16} aria-hidden="true" />
+          Settings
+        </button>
+      }
+    >
+      {!empty && (
+        <div className="page-head enter">
+          <h1>Playtests</h1>
+          <button className="btn primary" onClick={onNew}>
+            <Plus size={16} aria-hidden="true" />
             New playtest
           </button>
         </div>
-      </div>
-      <h1>Playtests</h1>
-      {error && <p className="error">{error}</p>}
-      {list === null && <p className="dim">Loading playtests…</p>}
-      {list !== null && list.length === 0 && !error && (
-        <div className="card empty">
-          <p>No playtests yet. Run your first one in about 5 minutes.</p>
-        </div>
       )}
-      {list !== null && list.length > 0 && (
-        <div className="card">
-          {list.map((s) => (
-            <div className="session" key={s.id}>
+      {error && <p className="error" role="alert">{error}</p>}
+      {list === null && <p className="muted">Loading playtests…</p>}
+
+      {empty && (
+        <div className="card empty-hero enter stack-lg">
+          <div className="row spread" style={{ alignItems: 'flex-start' }}>
+            <div className="stack" style={{ maxWidth: 560 }}>
+              <h1>Draw how your level should feel, then watch a real player react</h1>
+              <p className="t2">Senti plots your plan against what a playtester&rsquo;s webcam notices, and shows where the two disagree.</p>
               <div>
-                <div className="name">{s.name}</div>
-                <div className="dim" style={{ fontSize: 'var(--fs-label)' }}>
-                  {new Date(s.createdAt).toLocaleString()} · {fmt(s.playedSec)} played
-                  {s.hasRecording ? '' : ' · no recording'}
-                </div>
-              </div>
-              <div className="row">
-                <button onClick={() => onOpen(s.id)}>Open report</button>
-                <button className="danger" onClick={() => setConfirm(s)}>
-                  Delete
+                <button className="btn primary big" onClick={onNew}>
+                  New playtest
                 </button>
               </div>
             </div>
-          ))}
+            <span className="example-tag">Example</span>
+          </div>
+          <ExampleTimeline />
         </div>
       )}
+
+      {list !== null && list.length > 0 && (
+        <div className="session-list">
+          {list.map((s, i) => {
+            const l = loaded[s.id]
+            const ready = l && l !== 'failed'
+            return (
+              <div className={`session-row enter${i < 4 ? ` d${i}` : ''}`} key={s.id}>
+                <button className="row-open" onClick={() => onOpen(s.id)} aria-label={`Open report for ${s.name}`} />
+                <div style={{ minWidth: 0 }}>
+                  <div className="session-name">{s.name}</div>
+                  <div className="session-meta">
+                    {fmtDate(s.createdAt)} &middot; {fmt(s.playedSec)} played{s.hasRecording ? '' : ' · no recording'}
+                  </div>
+                  <div className="session-meta counts">{ready ? reportCounts(l.report) : l === 'failed' ? 'Could not read this playtest' : ' '}</div>
+                </div>
+                <div className="line-slot">
+                  {ready && (
+                    <Timeline
+                      variant="mini"
+                      intended={l.session.intended}
+                      felt={l.report.felt}
+                      total={totalSec(l.session, l.report)}
+                      moments={l.report.moments}
+                      mismatches={l.report.mismatches}
+                      label={`Intended and felt tension for ${s.name}`}
+                    />
+                  )}
+                </div>
+                <button className="btn ghost icon" aria-label={`Delete ${s.name}`} title="Delete" onClick={() => setConfirm(s)}>
+                  <Trash2 size={16} aria-hidden="true" />
+                </button>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
       {confirm && (
-        <div className="modal-back" role="dialog" aria-modal="true">
+        <div className="modal-back" role="dialog" aria-modal="true" aria-labelledby="del-title">
           <div className="modal stack">
-            <h2>Delete “{confirm.name}”?</h2>
-            <p>Delete this playtest and its recording? This cannot be undone.</p>
+            <h2 id="del-title">Delete “{confirm.name}”?</h2>
+            <p className="t2">Delete this playtest and its recording? This cannot be undone.</p>
             <div className="row">
-              <button className="danger" disabled={deleting} onClick={() => void doDelete()}>
+              <button className="btn danger" disabled={deleting} onClick={() => void doDelete()}>
                 {deleting ? 'Deleting…' : 'Delete'}
               </button>
-              <button disabled={deleting} onClick={() => setConfirm(null)}>
+              <button className="btn ghost" autoFocus disabled={deleting} onClick={() => setConfirm(null)}>
                 Cancel
               </button>
             </div>
           </div>
         </div>
       )}
-    </div>
+    </Shell>
+  )
+}
+
+function ShapePreview({ shape }: { shape: Shape }) {
+  const w = 84
+  const h = 32
+  const d = useMemo(() => {
+    const c = monotone(toPts(shape.pts.map(([f, level]) => ({ t: f * 100, level }))))
+    return c.path((t) => 2 + (t / 100) * (w - 4), (v) => h - 3 - (v / 100) * (h - 6))
+  }, [shape])
+  return (
+    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} aria-hidden="true">
+      <path d={d} fill="none" stroke="var(--text)" strokeWidth={1.5} strokeDasharray="4 3" strokeLinecap="round" opacity={0.85} />
+    </svg>
   )
 }
 
@@ -229,6 +359,8 @@ export function NewPlaytest({ onCancel, onContinue }: { onCancel: () => void; on
   const [plannedSec, setPlannedSec] = useState(300)
   const [minutesText, setMinutesText] = useState('5')
   const [intended, setIntended] = useState<IntendedPoint[]>(() => defaultCurve(300))
+  const [edited, setEdited] = useState(false)
+  const [pendingShape, setPendingShape] = useState<Shape | null>(null)
   const [beats, setBeats] = useState<Beat[]>([])
   const [beatLabel, setBeatLabel] = useState('')
   const [beatTime, setBeatTime] = useState('')
@@ -246,6 +378,7 @@ export function NewPlaytest({ onCancel, onContinue }: { onCancel: () => void; on
     setBeats(beats.filter((b) => b.t <= next))
     setPlannedSec(next)
     setMinutesText(String(next / 60))
+    setPendingShape(null)
   }
 
   function addBeat(): void {
@@ -259,32 +392,42 @@ export function NewPlaytest({ onCancel, onContinue }: { onCancel: () => void; on
     setBeatError('')
   }
 
+  function applyShape(s: Shape): void {
+    setIntended(shapePoints(s, plannedSec))
+    setEdited(false)
+    setPendingShape(null)
+  }
+
+  function pickShape(s: Shape): void {
+    if (edited) setPendingShape(s)
+    else applyShape(s)
+  }
+
   const canContinue = name.trim().length > 0
 
   return (
-    <div className="page stack">
-      <div className="row spread">
-        <h1>New playtest</h1>
-        <button onClick={onCancel}>Cancel</button>
-      </div>
-
-      <div className="card stack">
-        <div className="row" style={{ alignItems: 'flex-end' }}>
-          <div style={{ flex: 1, minWidth: 240 }}>
-            <label className="label" htmlFor="pname">
-              Name
-            </label>
-            <input id="pname" type="text" value={name} placeholder="Level 2, first playtest" onChange={(e) => setName(e.target.value)} />
+    <Shell
+      right={
+        <button className="btn ghost" onClick={onCancel}>
+          Cancel
+        </button>
+      }
+    >
+      <div className="stack-lg enter">
+        <div className="row" style={{ alignItems: 'flex-end', gap: 32 }}>
+          <div className="field grow" style={{ minWidth: 280 }}>
+            <label htmlFor="pname">Name</label>
+            <input id="pname" className="name-input" type="text" value={name} placeholder="Level 2, first playtest" onChange={(e) => setName(e.target.value)} />
           </div>
-          <div>
-            <label className="label" htmlFor="mins">
-              Planned length (minutes)
-            </label>
+          <div className="field">
+            <label htmlFor="mins">Planned length (minutes)</label>
             <input
               id="mins"
+              className="mono"
               type="number"
               min={1}
               max={120}
+              style={{ width: 120 }}
               value={minutesText}
               onChange={(e) => setMinutesText(e.target.value)}
               onBlur={commitMinutes}
@@ -292,58 +435,79 @@ export function NewPlaytest({ onCancel, onContinue }: { onCancel: () => void; on
             />
           </div>
         </div>
-      </div>
 
-      <div className="card">
-        <p style={{ margin: 0 }}>Senti records your screen while you play. Put your game on this screen.</p>
-      </div>
-
-      <div className="card stack">
-        <h2>Intended tension curve</h2>
-        <p className="dim">Draw how tense this level should feel over time. Senti compares it with what the player actually did.</p>
-        <CurveEditor plannedSec={plannedSec} points={intended} beats={beats} onChange={setIntended} />
-        <h2 style={{ marginTop: 8 }}>Beats</h2>
-        <div className="row" style={{ alignItems: 'flex-end' }}>
-          <div style={{ flex: 1, minWidth: 200 }}>
-            <label className="label" htmlFor="blabel">
-              Beat name
-            </label>
-            <input id="blabel" type="text" value={beatLabel} placeholder="Jump scare" onChange={(e) => setBeatLabel(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addBeat()} />
-          </div>
-          <div>
-            <label className="label" htmlFor="btime">
-              Time (m:ss)
-            </label>
-            <input id="btime" type="text" style={{ width: 100 }} value={beatTime} placeholder="2:10" onChange={(e) => setBeatTime(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addBeat()} />
-          </div>
-          <button onClick={addBeat}>Add beat</button>
-        </div>
-        {beatError && <p className="error">{beatError}</p>}
-        {beats.length > 0 && (
-          <ul className="plain">
-            {beats.map((b, i) => (
-              <li key={i}>
-                <span style={{ fontFamily: 'var(--mono)' }}>{fmt(b.t)}</span>
-                <span>{b.label}</span>
-                <button className="link" onClick={() => setBeats(beats.filter((_, k) => k !== i))}>
-                  Remove
+        <div className="stack">
+          <div className="row spread">
+            <div>
+              <h2>Intended tension curve</h2>
+              <p className="t2 small" style={{ marginTop: 2 }}>
+                Draw how tense this level should feel over time. Senti compares it with what the player actually did.
+              </p>
+            </div>
+            <div className="row" style={{ gap: 8 }}>
+              {SHAPES.map((s) => (
+                <button key={s.id} className="shape-btn" onClick={() => pickShape(s)} aria-label={`Start from ${s.label}`}>
+                  <ShapePreview shape={s} />
+                  <span>{s.label}</span>
                 </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
+              ))}
+            </div>
+          </div>
+          {pendingShape && (
+            <div className="confirm-strip" role="alertdialog" aria-label="Replace the curve">
+              <span>Replace your edited curve with {pendingShape.label}?</span>
+              <button className="btn" onClick={() => applyShape(pendingShape)}>
+                Replace
+              </button>
+              <button className="btn ghost" onClick={() => setPendingShape(null)}>
+                Keep mine
+              </button>
+            </div>
+          )}
+          <CurveEditor
+            plannedSec={plannedSec}
+            points={intended}
+            beats={beats}
+            onChange={(p) => (setIntended(p), setEdited(true))}
+            onBeatsChange={setBeats}
+          />
+          <p className="muted small">
+            Click to add a point, drag to move it, right-click or press Delete to remove it. Height is how tense this moment should feel, from 0 (calm) to 100 (peak).
+          </p>
+        </div>
 
-      <div className="row">
-        <button
-          className="primary"
-          disabled={!canContinue}
-          onClick={() => onContinue({ name: name.trim(), plannedSec, intended, beats })}
-        >
-          Continue
-        </button>
-        {!canContinue && <span className="dim">Add a name to continue.</span>}
+        <div className="stack">
+          <h2>Beats</h2>
+          <div className="row" style={{ alignItems: 'flex-end' }}>
+            <div className="field grow" style={{ minWidth: 200, maxWidth: 360 }}>
+              <label htmlFor="blabel">Beat name</label>
+              <input id="blabel" type="text" value={beatLabel} placeholder="Jump scare" onChange={(e) => setBeatLabel(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addBeat()} />
+            </div>
+            <div className="field">
+              <label htmlFor="btime">Time (m:ss)</label>
+              <input id="btime" className="mono" type="text" style={{ width: 100 }} value={beatTime} placeholder="2:10" onChange={(e) => setBeatTime(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addBeat()} />
+            </div>
+            <button className="btn" onClick={addBeat}>
+              Add beat
+            </button>
+          </div>
+          {beatError && <p className="error" role="alert">{beatError}</p>}
+          <p className="muted small">Beats appear as flags on the curve. Drag a flag sideways to move it, or select it and press Delete.</p>
+        </div>
+
+        <div className="row spread" style={{ borderTop: '1px solid var(--line)', paddingTop: 20 }}>
+          <p className="t2 row" style={{ gap: 10 }}>
+            <Monitor size={16} strokeWidth={1.5} className="ico" aria-hidden="true" />
+            Senti records your screen while you play. Put your game on this screen.
+          </p>
+          <div className="row">
+            {!canContinue && <span className="muted small">Add a name to continue.</span>}
+            <button className="btn primary" disabled={!canContinue} onClick={() => onContinue({ name: name.trim(), plannedSec, intended, beats })}>
+              Continue
+            </button>
+          </div>
+        </div>
       </div>
-    </div>
+    </Shell>
   )
 }
