@@ -242,6 +242,13 @@ This is the handover document. A new director should be able to take over from t
     - Committed; the worker reports priority -14 via SENTI_PACKAGE_CHECK.
     - Next: a real playtest in Senti to confirm the 80% face gate.
 
+23. **BLOCKER (17 Nov ~15:15): Presage trial credits exhausted.**
+    - The probe shows `kCreditExhausted` on every start.
+    - The last playtest ("jump scare", 14:08) had 29.9 pkt/s and 0 restarts, but landmarks were frozen (speed 0 every second) and talking was absent, while expressions varied. Likely related to the credits running out. UNVERIFIED; treat that run as INVALID.
+    - Fix shipped: fatal SDK errors (2 auth, 4 credits, 13 metric not authorized) stop rebuilding and show a plain message. Verified: state=error, 0 restarts (before: 15 rebuilds in 55 s).
+    - **Owner action needed:** ask on the Presage Discord for extra credits (the contest page says to do exactly this). Do NOT create a second account.
+    - **Credit budget from now:** one clean playtest, the n=2 session and the demo recording. No more exploratory camera tests.
+
 **Gotchas learned:**
 - The permission handler must allow both `media` and `display-capture`.
 - The electron postinstall may skip the binary download; fix with `node node_modules/electron/install.js`.
