@@ -45,7 +45,7 @@ This is the handover document. A new director should be able to take over from t
 
 | Claim | Mechanism | Boundary | Required proof | Current proof | Status |
 | --- | --- | --- | --- | --- | --- |
-| Felt curve comes from live Presage signals | SDK `metrics` events → felt-intensity module | SDK on device | Live session log + video showing raw SDK values | none | UNPROVEN |
+| Felt curve comes from live Presage signals | SDK `metrics` events → felt-intensity module | SDK on device | Live session log + video showing raw SDK values | session 20261117203123-oz9aau: 136 s of live samples → 8 startles | PROVEN (L4, n=1) |
 | Signals separate calm from tense segments | per-segment aggregation vs baseline | felt-intensity module | Day-1 probe: calm 3 min vs horror 3 min show a clear difference | none | UNPROVEN (load-bearing) |
 | Curves align with gameplay video | shared monotonic clock for recording start, markers and samples | main process clock | Marker in the video at t matches marker on the chart at t (±1 s) | none | UNPROVEN |
 | Mismatches are flagged correctly | deterministic diff rules (intended vs felt per segment) | pure module + unit tests | Unit tests + one real session with a known mismatch | none | UNPROVEN |
@@ -76,7 +76,7 @@ This is the handover document. A new director should be able to take over from t
 | 0 Understand | research, rules, SDK surface | research doc complete | DONE (16 Nov) |
 | 1 Define | promise, Core Outcome, ledger, scope | this file | DONE (16 Nov) |
 | 2 Feasibility | probe: key works, face metrics authorized, credits, signal separation, camera + screen capture coexist | all 5 checks PASS with logged evidence | DONE 16 Nov (key, face metrics, coexist, startle separation PASS; pulse authorized but unreliable on owner laptop; credits: no errors seen) |
-| 3 Vertical slice | one playtest end to end (ugly UI ok): curve → session → report with real signals | Core Outcome observed once | FLOW DONE 17 Nov; Core Outcome not yet observed cleanly (sensing starved during play) |
+| 3 Vertical slice | one playtest end to end (ugly UI ok): curve → session → report with real signals | Core Outcome observed once | DONE 17 Nov 21:31: Core Outcome observed (face 100%, 8 startles, 3 mismatches) |
 | 4 Product shell | design skill: real UI, four states, copy | first-time-user pass | PENDING |
 | 5 Failure/recovery | camera lost, no face, key invalid, credits exhausted, app restart mid-session, delete | critical-bug red-team pass | PARTIAL: SDK rebuild recovery, worker crash, recorder retry, video retry and range crash fixed; red-team pass not run |
 | 6 Package | Windows installer on GitHub Releases | fresh-machine install runs | PENDING |
@@ -125,7 +125,7 @@ This is the handover document. A new director should be able to take over from t
 
 ## 9. Current status
 
-**BUILDING: MVP IMPLEMENTED, CORE OUTCOME NOT YET OBSERVED CLEANLY (17 Nov, 0792613+).** The full flow runs end to end (3:00 played, saved, report shown), and the public repo exists. Last UAT run (attempt 3): baseline face 34/36 seconds, but play face only 11/54 at 8 pkt/s with 4 restarts. On the owner's 2-core laptop, YouTube full-screen HD + recording + Presage starved sensing. Recording is now 640x360 at 5 fps and the next run uses 480p windowed playback. Felt model FROZEN. **Open gates:** clean real session, n=2 tester session, Windows installer + Release, README, red-team, demo video, DEV post.
+**BUILDING: CORE OUTCOME PROVEN (L4) on the owner laptop, 17 Nov 21:31 local (session 20261117203123-oz9aau).** Play: face 136/136 s, 29.8 pkt/s, 0 restarts, no gaps; baseline 44/44. The felt model found 8 startles (strong at 0:26, 0:41, 1:21, 2:04), 9 voice reactions and 3 correct-looking mismatches against the default curve. Fixes that made it work: preview listener only in check, PRIORITY_HIGH worker, light recording, credits restored to 1000. **Open gates:** n=2 session, demo curve matched to the video, editor beat-label clip, README, red-team + audit, camera flow on the installed build, demo video, DEV post.
 
 ## 10. Decision log
 
