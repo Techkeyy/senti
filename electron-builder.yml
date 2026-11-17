@@ -1,17 +1,43 @@
-appId: com.senti.app
+appId: com.techkeyy.senti
 productName: Senti
 directories:
+  output: release
   buildResources: build
 files:
-  - '!**/.vscode/*'
-  - '!src/*'
-  - '!probe/*'
-  - '!director.md'
-  - '!electron.vite.config.*'
-  - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+  - out/**
+  - '!out/shots{,/**}'
+  - package.json
+  # Only the win32-x64 native runtime ships; the other platforms' packages are hundreds of MB.
+  - '!node_modules/@smartspectra/node-sdk-darwin-arm64{,/**}'
+  - '!node_modules/@smartspectra/node-sdk-linux-arm64{,/**}'
+  - '!node_modules/@smartspectra/node-sdk-linux-x64{,/**}'
+  - '!node_modules/@smartspectra/node-sdk/{samples,docs}{,/**}'
+  - '!node_modules/koffi/build/koffi/darwin_arm64{,/**}'
+  - '!node_modules/koffi/build/koffi/darwin_x64{,/**}'
+  - '!node_modules/koffi/build/koffi/freebsd_arm64{,/**}'
+  - '!node_modules/koffi/build/koffi/freebsd_ia32{,/**}'
+  - '!node_modules/koffi/build/koffi/freebsd_x64{,/**}'
+  - '!node_modules/koffi/build/koffi/linux_arm64{,/**}'
+  - '!node_modules/koffi/build/koffi/linux_armhf{,/**}'
+  - '!node_modules/koffi/build/koffi/linux_ia32{,/**}'
+  - '!node_modules/koffi/build/koffi/linux_loong64{,/**}'
+  - '!node_modules/koffi/build/koffi/linux_riscv64d{,/**}'
+  - '!node_modules/koffi/build/koffi/linux_x64{,/**}'
+  - '!node_modules/koffi/build/koffi/musl_arm64{,/**}'
+  - '!node_modules/koffi/build/koffi/musl_x64{,/**}'
+  - '!node_modules/koffi/build/koffi/openbsd_ia32{,/**}'
+  - '!node_modules/koffi/build/koffi/openbsd_x64{,/**}'
+  - '!node_modules/koffi/build/koffi/win32_arm64{,/**}'
+  - '!node_modules/koffi/build/koffi/win32_ia32{,/**}'
+# Native libraries cannot load from inside app.asar (koffi .node + SDK dlls).
+asarUnpack:
+  - node_modules/@smartspectra/node-sdk-win32-x64/**
+  - node_modules/koffi/**
 win:
-  target: nsis
+  target:
+    - target: nsis
+      arch: x64
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
-  artifactName: ${name}-${version}-setup.${ext}
+  artifactName: Senti-Setup-${version}.exe

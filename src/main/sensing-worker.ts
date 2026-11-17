@@ -384,7 +384,11 @@ async function stopSensing(): Promise<SensingResult> {
 parentPort.on('message', (e) => {
   const m = e.data as ToWorker
   try {
-    if (m.type === 'start') {
+    if (m.type === 'packageCheck') {
+      // Dev-only (SENTI_PACKAGE_CHECK): proves the SDK and its native runtime load. Enumerates cameras, never opens one.
+      const cams = SmartSpectraSDK.availableCameras()
+      send({ type: 'packageCheck', info: { ok: true, version: SmartSpectraSDK.version, cameras: cams.length } })
+    } else if (m.type === 'start') {
       apiKey = m.apiKey
       startSensing()
     } else if (m.type === 'phase') {

@@ -8,6 +8,25 @@ import type { SensingPhase, SensingEvent } from '../shared/session'
 import type { FromWorker, SensingResult, ToWorker } from './sensing-protocol'
 import { getApiKey } from './settings'
 
+/**
+ * Packaged app: require.resolve finds the SDK's native package inside app.asar, but LoadLibrary needs a real file.
+ * asarUnpack puts it in app.asar.unpacked, so point the SDK's documented override there.
+ */
+function workerEnv(): NodeJS.ProcessEnv {
+  const env = { ...process.env }
+  if (app.isPackaged && !env.SMARTSPECTRA_CAPI_PATH) {
+    env.SMARTSPECTRA_CAPI_PATH = join(
+      process.resourcesPath,
+      'app.asar.unpacked',
+      'node_modules',
+      '@smartspectra',
+      'node-sdk-win32-x64',
+      'smartspectra_capi.dll'
+    )
+  }
+  return env
+}
+
 const STOP_TIMEOUT_MS = 12_000
 const CRASH_MESSAGE = 'The camera reader stopped unexpectedly. Press Retry.'
 const EMPTY: SensingResult = { baseline: [], samples: [], restarts: 0, signals: [] }
@@ -30,7 +49,7 @@ function startSensing(): void {
   const apiKey = getApiKey()
   if (!apiKey) throw new Error('Add your Presage API key first.')
   previewFrames = 0
-  const w = utilityProcess.fork(join(__dirname, 'sensing-worker.js'), [], { serviceName: 'senti-sensing' })
+  const w = utilityProcess.fork(join(__dirname, 'sensing-worker.js'), [], { serviceName: 'senti-sensing', env: workerEnv() })
   worker = w
   w.on('message', (m: FromWorker) => {
     if (worker !== w) return
@@ -126,6 +145,35 @@ export async function devStartSensingUntilRunning(maxMs: number): Promise<string
 }
 export const devStopSensing = (): Promise<SensingResult> => stopSensing()
 
+/** Dev-only: fork the worker, have it load the SDK and list cameras (no session, no camera open), print, quit. */
+function packageCheck(): void {
+  const out = (o: unknown): void => void process.stdout.write('SENTI_PACKAGE_CHECK ' + JSON.stringify(o) + '\n')
+  const w = utilityProcess.fork(join(__dirname, 'sensing-worker.js'), [], { serviceName: 'senti-package-check', env: workerEnv(), stdio: 'pipe' })
+  const timer = setTimeout(() => {
+    out({ ok: false, error: 'timeout' })
+    w.kill()
+    app.quit()
+  }, 30_000)
+  w.on('message', (m: FromWorker) => {
+    if (m.type !== 'packageCheck') return
+    clearTimeout(timer)
+    done = true
+    out({ ...m.info, worker: __dirname, packaged: app.isPackaged })
+    w.kill()
+    app.quit()
+  })
+  let err = ''
+  let done = false
+  w.stderr?.on('data', (d) => (err += String(d)))
+  w.on('exit', (code) => {
+    if (done) return
+    clearTimeout(timer)
+    out({ ok: false, error: `worker exited ${code}`, stderr: err.slice(0, 600) })
+    app.quit()
+  })
+  w.postMessage({ type: 'packageCheck' } satisfies ToWorker)
+}
+
 export function registerSensing(getWindow: () => BrowserWindow | null): void {
   getWin = getWindow
   ipcMain.handle(IPC.sensingStart, () => startSensing())
@@ -136,6 +184,7 @@ export function registerSensing(getWindow: () => BrowserWindow | null): void {
     worker = null
     w?.kill()
   })
+  if (process.env.SENTI_PACKAGE_CHECK === '1') packageCheck()
   const st = Number(process.env.SENTI_SENSING_SELFTEST ?? 0)
   if (st > 0) void selfTest(st).catch((e) => process.stdout.write(`SENTI_SENSING_SELFTEST_ERROR ${String(e)}\n`))
 }

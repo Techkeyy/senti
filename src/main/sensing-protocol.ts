@@ -12,8 +12,10 @@ export type ToWorker =
   | { type: 'start'; apiKey: string }
   | { type: 'phase'; phase: SensingPhase; playStartedAtMs?: number }
   | { type: 'stop' }
+  | { type: 'packageCheck' }
 
 export type FromWorker =
   | { type: 'event'; event: SensingEvent }
   | { type: 'preview'; frame: PreviewFrame }
   | { type: 'stopped'; result: SensingResult }
+  | { type: 'packageCheck'; info: Record<string, unknown> }
