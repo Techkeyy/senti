@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 440" width="960" height="440" role="img" aria-labelledby="t d" font-family="Segoe UI, system-ui, -apple-system, Helvetica, Arial, sans-serif">
+  <title id="t">How Senti works</title>
+  <desc id="d">Flow: the designer draws the intended curve, the playtester plays, Presage SmartSpectra reads the webcam on device in a utility process, Senti derives per-second behaviour (head speed, talking, face), a deterministic felt model in felt.ts builds the felt curve, and the report shows felt against intended with mismatches and click to seek.</desc>
+  <defs>
+    <marker id="ar" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 1 L9 5 L0 9 z" fill="#eef0f5"/>
+    </marker>
+    <marker id="ae" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 1 L9 5 L0 9 z" fill="#ff7a45"/>
+    </marker>
+  </defs>
+  <rect width="960" height="440" rx="14" fill="#0b0d12"/>
+  <text x="40" y="44" fill="#eef0f5" font-size="20" font-weight="700">How Senti works</text>
+  <text x="40" y="66" fill="#9aa3b5" font-size="13">Everything after the camera is deterministic and runs offline from the saved readings.</text>
+
+  <g>
+    <rect x="40" y="96" width="260" height="120" rx="10" fill="#141821" stroke="#2a3040"/>
+    <text x="58" y="122" fill="#9aa3b5" font-size="12" font-weight="600" letter-spacing="1">1  DESIGNER</text>
+    <text x="58" y="146" fill="#eef0f5" font-size="16" font-weight="600">Draws the intended curve</text>
+    <text x="58" y="166" fill="#9aa3b5" font-size="13">with named beats</text>
+    <path d="M58 200 C95 200 105 180 135 180 S170 200 200 200 S235 176 262 182" fill="none" stroke="#eef0f5" stroke-width="2" stroke-dasharray="6 5" stroke-linecap="round"/>
+  </g>
+  <g>
+    <rect x="350" y="96" width="260" height="120" rx="10" fill="#141821" stroke="#2a3040"/>
+    <text x="368" y="122" fill="#9aa3b5" font-size="12" font-weight="600" letter-spacing="1">2  PLAYTESTER</text>
+    <text x="368" y="146" fill="#eef0f5" font-size="16" font-weight="600">Plays the level</text>
+    <text x="368" y="170" fill="#9aa3b5" font-size="13">Screen is recorded, face is not.</text>
+    <text x="368" y="190" fill="#9aa3b5" font-size="13">F8 drops a marker, F9 stops.</text>
+  </g>
+  <g>
+    <rect x="660" y="96" width="260" height="120" rx="10" fill="#141821" stroke="#2a3040"/>
+    <text x="678" y="122" fill="#9aa3b5" font-size="12" font-weight="600" letter-spacing="1">3  PRESAGE SMARTSPECTRA</text>
+    <text x="678" y="146" fill="#eef0f5" font-size="16" font-weight="600">Reads the webcam</text>
+    <text x="678" y="170" fill="#9aa3b5" font-size="13">On device, in a utility process.</text>
+    <text x="678" y="190" fill="#9aa3b5" font-size="13">Camera frames are never saved.</text>
+  </g>
+  <line x1="302" y1="156" x2="346" y2="156" stroke="#eef0f5" stroke-width="2" marker-end="url(#ar)"/>
+  <line x1="612" y1="156" x2="656" y2="156" stroke="#eef0f5" stroke-width="2" marker-end="url(#ar)"/>
+
+  <path d="M790 218 V250 H170 V274" fill="none" stroke="#eef0f5" stroke-width="2" stroke-linejoin="round" marker-end="url(#ar)"/>
+  <text x="480" y="242" text-anchor="middle" fill="#9aa3b5" font-size="12">one reading per second</text>
+
+  <g>
+    <rect x="40" y="280" width="260" height="120" rx="10" fill="#141821" stroke="#2a3040"/>
+    <text x="58" y="306" fill="#9aa3b5" font-size="12" font-weight="600" letter-spacing="1">4  PER-SECOND BEHAVIOUR</text>
+    <text x="58" y="330" fill="#eef0f5" font-size="16" font-weight="600">Head speed, talking, face</text>
+    <text x="58" y="354" fill="#9aa3b5" font-size="13">Relative to this person's own</text>
+    <text x="58" y="374" fill="#9aa3b5" font-size="13">resting baseline.</text>
+  </g>
+  <g>
+    <rect x="350" y="280" width="260" height="120" rx="10" fill="#141821" stroke="#ff7a45" stroke-width="1.5"/>
+    <text x="368" y="306" fill="#ff7a45" font-size="12" font-weight="600" letter-spacing="1">5  FELT MODEL</text>
+    <text x="368" y="330" fill="#eef0f5" font-size="16" font-weight="600">Deterministic, felt.ts</text>
+    <text x="368" y="354" fill="#9aa3b5" font-size="13">Unit tested. No LLM, no cloud.</text>
+    <path d="M368 388 H420 L432 370 L446 388 H520 L530 374 L542 388 H590" fill="none" stroke="#ff7a45" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+  </g>
+  <g>
+    <rect x="660" y="280" width="260" height="120" rx="10" fill="#141821" stroke="#2a3040"/>
+    <text x="678" y="306" fill="#9aa3b5" font-size="12" font-weight="600" letter-spacing="1">6  REPORT</text>
+    <text x="678" y="330" fill="#eef0f5" font-size="16" font-weight="600">Felt vs intended</text>
+    <text x="678" y="354" fill="#9aa3b5" font-size="13">Plain-sentence mismatches.</text>
+    <text x="678" y="374" fill="#9aa3b5" font-size="13">Click one, the video seeks there.</text>
+  </g>
+  <line x1="302" y1="340" x2="346" y2="340" stroke="#eef0f5" stroke-width="2" marker-end="url(#ar)"/>
+  <line x1="612" y1="340" x2="656" y2="340" stroke="#ff7a45" stroke-width="2" marker-end="url(#ae)"/>
+  <text x="480" y="426" text-anchor="middle" fill="#9aa3b5" font-size="12">Orange marks the felt path. Dashed white is the intended curve.</text>
+</svg>

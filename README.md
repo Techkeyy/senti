@@ -2,7 +2,7 @@
 
 **Draw the tension you planned. Watch the tension your player actually felt.** A Windows playtest tool for indie game designers, read live from the webcam with Presage SmartSpectra.
 
-**[Download](https://github.com/Techkeyy/senti/releases/latest)** · [Report screenshot](docs/report.png)
+**[Download](https://github.com/Techkeyy/senti/releases/latest)** · **[Evidence: real session data](docs/evidence/)** · [Report screenshot](docs/report.png)
 <!-- demo video link goes here -->
 <!-- DEV post link goes here -->
 
@@ -14,6 +14,15 @@ Senti is for the designer who runs those playtests. You draw the intended tensio
 
 <sub>Built for the DEV x Presage SmartSpectra SDK Challenge. Windows x64, one person tested so far, details in the limits below.</sub>
 
+## Try it in 2 minutes
+
+1. Download `Senti-Setup-0.1.0.exe` from [Releases](https://github.com/Techkeyy/senti/releases/latest) and run it. It is unsigned, so on the SmartScreen warning click "More info", then "Run anyway".
+2. Paste your free Presage key on the first screen ([get one here](https://physiology.presagetech.com/auth/register)).
+3. Click **New playtest**, draw a curve, agree on the consent screen, play something for a minute or two with F9 to stop, and open the report.
+
+If you only want to see a result first: [the report screenshot](docs/report.png), or the saved sessions in [docs/evidence/](docs/evidence/).
+<!-- demo-level: a sample test level will be linked here once demo-level/ exists -->
+
 ![A real report: the video, the intended curve (dashed), the felt curve (orange), flinch marks, and three mismatches in plain sentences](docs/report.png)
 
 ## Why this exists
@@ -22,18 +31,11 @@ Playtest tools today stop at one end or the other. Surveys and interviews captur
 
 That leaves a gap: nobody lines up what you intended with what happened, second by second, on the same timeline as the gameplay. Presage SmartSpectra makes it reachable on a normal laptop webcam, because it gives per-frame face landmarks and talking detection without any special hardware.
 
-```
-   WHAT YOU PLANNED                      WHAT SENTI ADDS
-   calm ... tension ... JUMP SCARE       the same timeline, with the player on it
-
-   intended   ----..____/\____---        you drew this
-   felt       ____.._____/\_____         flinch at the scare, or a flat line
-                         ^
-              mismatch: "You planned a peak, the player barely moved."
-              click it, the gameplay video jumps to 0:50
-```
+![Illustration, not real data: the intended curve with a jump scare and a boss peak, the felt curve that flinches at the scare but stays flat at the boss, and the mismatch sentence the designer can click](docs/plan-vs-felt.svg)
 
 ## What it does
+
+![Flow from the designer's intended curve through the playtester, Presage SmartSpectra, per-second behaviour and the felt model to the report](docs/how-it-works.svg)
 
 1. **Takes your plan.** You name the playtest, draw the intended tension curve, and optionally drop named beats ("jump scare", "boss appears") on it. Output: a saved intended curve.
 2. **Asks for consent.** The playtester reads a plain screen about the camera, the screen recording and the data, and agrees. Nothing uses the camera before that.
@@ -81,10 +83,12 @@ The camera check image is rendered with Senti's dev screen switcher, so the prev
 
 | Check | Result |
 |---|---|
-| Pre-registered startle test (rule written before the run) | 11 spike events during jump scares vs 1 in calm. One person, one session. |
-| Owner playtest, 17 Nov | Face present 136 of 136 s at 29.8 readings/s, 0 restarts, 8 flinches, 3 mismatches |
-| Fresh-install playtest, 18 Nov (installer, empty state) | Face present 128 of 130 s, 0 restarts, 3 flinches, 3 mismatches, 2 s look-away |
-| Unit tests | 11 passing (`npm test`) |
+| Pre-registered startle test (rule written before the run) | 11 spike events during jump scares vs 1 in calm, counted above the calm 99th percentile (1.03 face-widths/s). One person, one session. Real trace: [`startle-trace.json`](src/shared/__fixtures__/startle-trace.json), asserted by a unit test |
+| [Owner playtest, 17 Nov](docs/evidence/20261117203123-oz9aau.json) | Face present 136 of 136 s at 29.8 readings/s, 0 restarts, 8 flinches, 3 mismatches |
+| [Fresh-install playtest, 18 Nov](docs/evidence/20261118070014-j6ow1o.json) (installer, empty state) | Face present 128 of 130 s, 0 restarts, 3 flinches, 3 mismatches, 2 s look-away |
+| Unit tests | 11 passing (`npm test`), including the real startle trace |
+
+**Check it yourself:** the two files in [`docs/evidence/`](docs/evidence/) are the real session exports (no camera frames, no video). Count `samples[].face` for face seconds, look at `samples[].headSpeedMax` against the startle rule in `src/shared/felt.ts`, or run `npm test` for the model. Flinches and mismatches come from running `computeReport` on those files.
 
 These are small samples from one person on one laptop. They show the pipeline works end to end on real signals. They are not a validation of the felt curve against what people actually feel.
 
@@ -100,7 +104,7 @@ These are small samples from one person on one laptop. They show the pipeline wo
 | `src/main/sessions.ts` | Saves, lists and deletes sessions; serves video with range requests; F8/F9 hotkeys |
 | `src/main/recorder.ts` | Grants the primary screen for recording; minimizes and restores the window |
 | `src/main/settings.ts` | Stores the Presage key, encrypted with Windows via Electron safeStorage |
-| `src/main/dev.ts` | Developer-only self-test flags, off for normal users |
+| `src/main/dev.ts` | Developer tooling: self-test flags, off for normal users |
 | `src/shared/felt.ts` | Pure felt-curve model and mismatch finder, unit tested |
 | `src/shared/session.ts`, `ipc.ts` | Shared types and IPC channel names |
 | `src/preload/index.ts` | The only bridge from the page to the main process |
@@ -112,6 +116,9 @@ These are small samples from one person on one laptop. They show the pipeline wo
 | `src/renderer/src/Report.tsx` | Video, timeline, mismatch list, click to seek |
 | `src/renderer/src/Timeline.tsx`, `LiveTrace.tsx`, `FlinchMark.tsx` | Report and live charts and the flinch mark |
 | `src/renderer/src/ErrorBoundary.tsx` | Shows a recovery screen instead of a blank window |
+| `src/renderer/src/dev.ts`, `devSim.ts`, `src/renderer/shots.mjs` | Developer tooling: renderer self-tests, a dev screen switcher with simulated data, and the script that took the screenshots in `docs/` |
+| `probe/` | The feasibility probes and the pre-registered startle test, see [`probe/README.md`](probe/README.md) |
+| `docs/` | Screenshots, the two diagrams, and `evidence/` session exports |
 
 ## Why behaviour, not "emotions"
 
@@ -169,6 +176,10 @@ I used `@smartspectra/node-sdk` 3.5.0 (the Node/Electron binding) with the SDK's
 - **What Presage sees:** the SDK contacts Presage to check the key and usage. Per Presage's documentation it may also send short derived number summaries (never video) for an LLM wellness feature that apps cannot switch off. Senti does not request, show or store those insights.
 - **AI use:** Senti calls no other AI service, and the felt curve and report text come from fixed rules.
 - **Not a medical device.** Senti makes no health claims. It reports head movement, talking and whether a face is visible.
+
+## Developer notes
+
+The files marked developer tooling above are kept on purpose and do nothing in the installed app. The day-by-day build log, decisions and test results are in [`director.md`](director.md).
 
 ## Honest limits
 

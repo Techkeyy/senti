@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 360" width="960" height="360" role="img" aria-labelledby="t d" font-family="Segoe UI, system-ui, -apple-system, Helvetica, Arial, sans-serif">
+  <title id="t">Plan versus felt, an illustration</title>
+  <desc id="d">Illustration, not real data. An intended tension curve with a jump scare and a boss peak, and a felt curve that spikes at the scare but stays flat at the boss, producing a mismatch the designer can click to seek.</desc>
+  <defs>
+    <marker id="ar" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 1 L9 5 L0 9 z" fill="#eef0f5"/></marker>
+  </defs>
+  <rect width="960" height="360" rx="14" fill="#0b0d12"/>
+  <text x="40" y="42" fill="#eef0f5" font-size="20" font-weight="700">What you planned, and what the player did</text>
+  <text x="40" y="64" fill="#9aa3b5" font-size="13">Illustration, not real data. A real report is shown below.</text>
+
+  <line x1="60" y1="300" x2="900" y2="300" stroke="#2a3040" stroke-width="1.5"/>
+  <line x1="60" y1="100" x2="60" y2="300" stroke="#2a3040" stroke-width="1.5"/>
+  <g fill="#9aa3b5" font-size="11" text-anchor="middle">
+    <text x="60" y="318">0:00</text><text x="270" y="318">0:30</text><text x="480" y="318">1:00</text><text x="690" y="318">1:30</text><text x="900" y="318">2:00</text>
+  </g>
+
+  <g stroke="#2a3040" stroke-dasharray="3 5">
+    <line x1="410" y1="100" x2="410" y2="300"/><line x1="760" y1="100" x2="760" y2="300"/>
+  </g>
+  <text x="410" y="92" text-anchor="middle" fill="#eef0f5" font-size="12" font-weight="600">Jump scare</text>
+  <text x="760" y="92" text-anchor="middle" fill="#eef0f5" font-size="12" font-weight="600">Boss appears</text>
+
+  <path d="M60 270 L200 262 L330 210 L410 130 L480 250 L600 236 L720 165 L760 128 L820 220 L900 262" fill="none" stroke="#eef0f5" stroke-width="2.5" stroke-dasharray="8 6" stroke-linejoin="round" stroke-linecap="round"/>
+  <path d="M60 288 L180 286 L300 282 L390 280 L410 140 L440 170 L480 236 L530 274 L630 280 L760 276 L820 280 L900 284" fill="none" stroke="#ff7a45" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+  <circle cx="410" cy="140" r="5" fill="#ff7a45"/>
+  <circle cx="760" cy="276" r="5" fill="#ff7a45"/>
+
+  <line x1="640" y1="40" x2="676" y2="40" stroke="#eef0f5" stroke-width="2.5" stroke-dasharray="8 6"/>
+  <text x="684" y="44" fill="#eef0f5" font-size="12">intended</text>
+  <line x1="760" y1="40" x2="796" y2="40" stroke="#ff7a45" stroke-width="3"/>
+  <text x="804" y="44" fill="#ff7a45" font-size="12">felt</text>
+
+  <text x="422" y="150" fill="#9aa3b5" font-size="12">Flinch at the scare</text>
+  <rect x="500" y="170" width="210" height="40" rx="8" fill="#141821" stroke="#ff7a45"/>
+  <text x="512" y="187" fill="#eef0f5" font-size="11.5">Boss at 1:40: you planned a peak,</text>
+  <text x="512" y="201" fill="#eef0f5" font-size="11.5">the player barely moved.</text>
+  <line x1="680" y1="212" x2="753" y2="266" stroke="#eef0f5" stroke-width="1.5" marker-end="url(#ar)"/>
+  <text x="772" y="250" fill="#9aa3b5" font-size="11.5">Click the sentence,</text>
+  <text x="772" y="265" fill="#9aa3b5" font-size="11.5">the video jumps here</text>
+</svg>

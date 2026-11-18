@@ -23,7 +23,7 @@ if (args.includes('--list-cameras')) {
 
 const apiKey = process.env.SENTI_PRESAGE_KEY;
 if (!apiKey || !apiKey.trim()) {
-  console.error('No API key. Put SENTI_PRESAGE_KEY=<your key> in probe/.env (see README.md) and run again.');
+  console.error('No API key. Put SENTI_PRESAGE_KEY=<your key> in probe/.env (see probe/README.md) and run again.');
   process.exit(1);
 }
 
