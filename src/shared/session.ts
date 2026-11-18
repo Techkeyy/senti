@@ -1,5 +1,5 @@
 // Shared contract between main (sensing, storage) and renderer (UI). Owned by the director.
-// Change only with a written reason in director.md.
+// Change only with a written reason in the commit message.
 
 /** One point of the designer's intended tension curve. t = seconds from play start, level 0..100. */
 export interface IntendedPoint {

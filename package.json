@@ -1,9 +1,9 @@
 {
   "name": "senti",
   "version": "0.1.0",
-  "description": "Senti - playtest recorder and reaction reader",
+  "description": "Senti: draw the tension you planned, see the tension your player felt",
   "main": "./out/main/index.js",
-  "author": "Senti",
+  "author": "Techkeyy",
   "private": true,
   "scripts": {
     "dev": "electron-vite dev",

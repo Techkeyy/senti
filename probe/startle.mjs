@@ -1,4 +1,4 @@
-// Pre-registered startle test (see director.md item 15).
+// Pre-registered startle test (the pass rule below was fixed before the run; result in the README Evidence table).
 // Plan: settle 20 s (ignored), calm 90 s, tense 90 s. Face-only metrics on the native camera,
 // destroy-and-rebuild recovery. Head motion = speed of the face centre (mean of the 478 landmarks)
 // normalised by face size, in face-widths per second. Saves a per-second trace and applies the rule:

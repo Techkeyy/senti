@@ -11,3 +11,6 @@ probe/logs/
 Thumbs.db
 *.tsbuildinfo
 probe/run-*.txt
+
+# internal build log, kept locally
+director.md

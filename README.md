@@ -2,9 +2,10 @@
 
 **Draw the tension you planned. Watch the tension your player actually felt.** A Windows playtest tool for indie game designers, read live from the webcam with Presage SmartSpectra.
 
-**[Download](https://github.com/Techkeyy/senti/releases/latest)** · **[Evidence: real session data](docs/evidence/)** · [Report screenshot](docs/report.png)
-<!-- demo video link goes here -->
+**[Watch the 2.5-minute demo](https://youtu.be/VHjiw6QZF1o)** · **[Download](https://github.com/Techkeyy/senti/releases/latest)** · **[Evidence: real session data](docs/evidence/)** · [Report screenshot](docs/report.png)
 <!-- DEV post link goes here -->
+
+[![Senti demo video: draw the tension you planned, see the tension they felt](https://img.youtube.com/vi/VHjiw6QZF1o/maxresdefault.jpg)](https://youtu.be/VHjiw6QZF1o)
 
 > *"I built a jump scare. Did anyone actually jump?"*
 
@@ -115,6 +116,7 @@ These are small samples from one person on one laptop. They show the pipeline wo
 | `src/renderer/src/useRecorder.ts` | Screen recording at 640x360, 5 fps, waits for the first data |
 | `src/renderer/src/Report.tsx` | Video, timeline, mismatch list, click to seek |
 | `src/renderer/src/Timeline.tsx`, `LiveTrace.tsx`, `FlinchMark.tsx` | Report and live charts and the flinch mark |
+| `src/renderer/src/Shell.tsx`, `ExampleLine.tsx` | App frame and header; the example curve on the empty home screen |
 | `src/renderer/src/ErrorBoundary.tsx` | Shows a recovery screen instead of a blank window |
 | `src/renderer/src/dev.ts`, `devSim.ts`, `src/renderer/shots.mjs` | Developer tooling: renderer self-tests, a dev screen switcher with simulated data, and the script that took the screenshots in `docs/` |
 | `probe/` | The feasibility probes and the pre-registered startle test, see [`probe/README.md`](probe/README.md) |
@@ -179,7 +181,7 @@ I used `@smartspectra/node-sdk` 3.5.0 (the Node/Electron binding) with the SDK's
 
 ## Developer notes
 
-The files marked developer tooling above are kept on purpose and do nothing in the installed app. The day-by-day build log, decisions and test results are in [`director.md`](director.md).
+The files marked developer tooling above are kept on purpose and do nothing in the installed app. The decisions and test results that matter are in the Evidence, Why behaviour and How I tried to break it sections above, and every change is in the commit history.
 
 ## Honest limits
 
