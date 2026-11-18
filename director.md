@@ -286,6 +286,13 @@ This is the handover document. A new director should be able to take over from t
     - Decision: publish the installer on GitHub Releases, include the SDK LICENSE/NOTICE reference, BYO key.
     - README + LICENSE + editor label fix dispatched to a builder.
 
+28. **Demo film (18 Nov). The director is also the builder (owner's instruction).**
+    - Treatment: `C:\Users\HomePC\Desktop\demo videos\senti-film\TREATMENT.md`. 2:30, the ElevenLabs cloned voice "Iszee demo voice", ElevenLabs music (API verified) and SFX.
+    - Original demo level `demo-level/` with a built-in twist: the planned door scare falls flat, an accidental thunder startle, the real jump scare at 1:15, the boss at 1:45. Being built by a builder.
+    - Owner approved: original level (no copyrighted footage), face in the film (a phone side shot for the real flinch), 2:30 runtime.
+    - The VPS has only 2.6 GB free; no cleanup without permission.
+    - In parallel: repo audit + README upgrade builder. Evidence exports are in `docs/evidence/`.
+
 **Gotchas learned:**
 - The permission handler must allow both `media` and `display-capture`.
 - The electron postinstall may skip the binary download; fix with `node node_modules/electron/install.js`.
