@@ -114,12 +114,12 @@ This is the handover document. A new director should be able to take over from t
 | Gate | Requirement | Status |
 | --- | --- | --- |
 | New project | started during 4 to 22 Nov | PASS (repo created 16 Nov) |
-| SDK + live signal | SmartSpectra in a working app, one or more live signals | PENDING |
-| Public repo + setup instructions | https://github.com/Techkeyy/senti (public, created 17 Nov; key scan of full history: 0 matches) | Repo PASS, setup instructions PENDING (README) |
+| SDK + live signal | SmartSpectra in a working app, one or more live signals | PASS (fresh-install playtest 18 Nov; evidence in docs/evidence/) |
+| Public repo + setup instructions | https://github.com/Techkeyy/senti (public, created 17 Nov; key scan of full history: 0 matches) | PASS (README quickstart + Release v0.1.0) |
 | Demo video showing the live signal | | PENDING |
 | DEV post from the template, tags `devchallenge, presagechallenge` | | PENDING |
-| Consent and Data Handling section (storage, retention, deletion, telemetry, AI use) | | PENDING |
-| No medical claims, no covert monitoring | | PENDING (copy review) |
+| Consent and Data Handling section (storage, retention, deletion, telemetry, AI use) | README section written 18 Nov | PASS in README; copy into the DEV post |
+| No medical claims, no covert monitoring | | PASS (red-team copy review 17 Nov; consent screen + "not a medical device") |
 | Prize categories noted (enter both) | | PENDING |
 | Optional: agent session embed | | PENDING |
 
