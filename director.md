@@ -79,8 +79,8 @@ This is the handover document. A new director should be able to take over from t
 | 3 Vertical slice | one playtest end to end (ugly UI ok): curve → session → report with real signals | Core Outcome observed once | DONE 17 Nov 21:31: Core Outcome observed (face 100%, 8 startles, 3 mismatches) |
 | 4 Product shell | design skill: real UI, four states, copy | first-time-user pass | PENDING |
 | 5 Failure/recovery | camera lost, no face, key invalid, credits exhausted, app restart mid-session, delete | critical-bug red-team pass | PARTIAL: SDK rebuild recovery, worker crash, recorder retry, video retry and range crash fixed; red-team pass not run |
-| 6 Package | Windows installer on GitHub Releases | fresh-machine install runs | PENDING |
-| 7 UAT | owner runs the full journey from the installer | owner PASS | PENDING |
+| 6 Package | Windows installer on GitHub Releases | fresh-machine install runs | INSTALLER PASS 18 Nov (fresh-state install on owner laptop); Release PENDING |
+| 7 UAT | owner runs the full journey from the installer | owner PASS | PASS 18 Nov (face 128/130, 0 restarts, report OK) |
 | 8 Submission | README (perfect-readme), demo video (demo-video), DEV post, consent section | all hackathon gates | PENDING |
 
 **Halfway checkpoint:** by **19 Nov 23:59 UTC**, Phase 3 must be done. If not, cut scope.
@@ -260,6 +260,25 @@ This is the handover document. A new director should be able to take over from t
     - P2: menu/DevTools in prod, single instance, close mid-play, hotkey failure still minimizes, busy copy, error boundary, README/LICENSE/SDK redistribution check, consent storage/retention/telemetry copy.
     - **Approved fix list dispatched to a builder.** Do-not-touch: felt.ts, recorder params, priority approach.
     - After the fixes: rebuild the installer from HEAD, then a fresh-install full journey with the owner.
+
+25. **Red-team fixes landed (065f0ef).**
+    - B1: mounted/in-flight guards plus an abortable recorder.
+    - B2: cleanup always stops; a shared stop promise.
+    - B3: the worker sends results before teardown; a renderer fallback plus notice.
+    - B4: baseline pause/Retry, Ready gated on running, a low-face baseline warning with Redo.
+    - B5: rebuild budget (more than 6 in 120 s fails) plus a 5-min idle pause.
+    - Single instance (the dev SENTI_* exception applies to unpackaged builds only, tightened by the director), no prod menu, close confirm mid-play, error boundary, hotkey failure keeps Senti visible, camera-privacy busy copy, a 10 s stop guard in the recorder.
+    - 11/11 tests, typecheck, build, dash audit and storage selftest PASS (director re-ran).
+    - Race behaviour with a real camera is UNVERIFIED and goes into the fresh-install UAT.
+    - Installer rebuild from HEAD started.
+
+26. **Fresh-install UAT PASS (18 Nov, installer built 17 Nov 21:50 from 065f0ef+).**
+    - Fresh state: sessions moved aside, no key file.
+    - The owner ran the NSIS installer (the SmartScreen note applies), the key screen appeared, and the key saved via safeStorage (71-byte presage-key.bin). Empty home with the example curve.
+    - Full playtest from the installed app: face 128/130 s, 29.7 pkt/s, 0 restarts, no gaps; baseline 35/35. Recording saved and plays (2:05). Report: 3 flinches, voice reactions, 3 mismatches, 0:02 look-away.
+    - Earlier sessions restored (10 total).
+    - Gates: 6 (package) PASS, 7 (owner UAT from installer) PASS.
+    - Remaining: n=2 session, editor beat-label clip, README, GitHub Release, consent/data text, demo video, DEV post.
 
 **Gotchas learned:**
 - The permission handler must allow both `media` and `display-capture`.
