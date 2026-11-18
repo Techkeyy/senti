@@ -293,6 +293,14 @@ This is the handover document. A new director should be able to take over from t
     - The VPS has only 2.6 GB free; no cleanup without permission.
     - In parallel: repo audit + README upgrade builder. Evidence exports are in `docs/evidence/`.
 
+29. **Film plan v2 (18 Nov): the owner cannot record.** No hero session, no phone or face footage.
+    - Proof comes from the real 18 Nov fresh-install session (startles 0:28, 0:46, 1:13 at strength 1.00; 3 mismatches; a 2 s look-away) and the 17 Nov session for "136/136 s".
+    - The third-party reel inside the session recording is blurred and labelled.
+    - The demo level is used only as the level being designed.
+    - Narration is locked in `demo videos\senti-film\NARRATION.md`.
+    - A Video Builder agent was dispatched with the full master prompt (CDP captures from the dev build with a throwaway user data dir, ElevenLabs VO/music/SFX, Remotion, exactly 150 s / 4500 frames, QA, SHA-verified delivery).
+    - The demo level is committed (1691fa0). README v2 with diagrams is committed (c232a27).
+
 **Gotchas learned:**
 - The permission handler must allow both `media` and `display-capture`.
 - The electron postinstall may skip the binary download; fix with `node node_modules/electron/install.js`.
