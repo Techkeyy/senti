@@ -648,6 +648,9 @@ input[type='text'].name-input:focus-visible {
   pointer-events: none;
   z-index: 3;
 }
+.readout.below {
+  transform: translate(-50%, 0);
+}
 .readout b {
   font-family: var(--mono);
   font-weight: 500;

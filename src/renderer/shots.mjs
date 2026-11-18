@@ -153,6 +153,11 @@ async function main() {
   await type('#btime', '3:00')
   await click('button.btn:not(.primary):not(.ghost)')
   await sleep(500)
+  // A second beat near the right edge, to check that its label stays inside the plot while the readout is shown.
+  await type('#blabel', 'Boss fight')
+  await type('#btime', '4:55')
+  await click('button.btn:not(.primary):not(.ghost)')
+  await sleep(500)
   await evalJs('window.scrollTo(0, 0)')
   await sleep(200)
   const handle = await rectOf('[data-handle="3"]')

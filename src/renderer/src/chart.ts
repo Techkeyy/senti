@@ -113,7 +113,8 @@ export function flagRows<B extends { t: number; label: string }>(beats: B[], x: 
     .sort((p, q) => p.b.t - q.b.t)
     .forEach(({ b, idx }) => {
       const wText = b.label.length * 7.6 + 56
-      const flip = x(b.t) + wText > maxX
+      // Flip left when the label would run past the right edge, unless that would run past the left edge instead.
+      const flip = x(b.t) + wText > maxX && x(b.t) - wText >= 0
       const left = flip ? x(b.t) - wText : x(b.t)
       let row = end.findIndex((e) => e < left)
       if (row < 0) row = 0

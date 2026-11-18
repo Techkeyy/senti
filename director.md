@@ -280,6 +280,12 @@ This is the handover document. A new director should be able to take over from t
     - Gates: 6 (package) PASS, 7 (owner UAT from installer) PASS.
     - Remaining: n=2 session, editor beat-label clip, README, GitHub Release, consent/data text, demo video, DEV post.
 
+27. **SDK redistribution check (18 Nov).**
+    - The SDK LICENSE is proprietary, "solely under Presage's Terms of Service" (the ToS page needs JS and was not readable by tools).
+    - Evidence it is allowed: Presage docs have "Shipping your app / Redistribute on Linux" (bundling the SDK in your installer). In Discord #sdk-support, Presage staff (Bobby) told another participant "Yes, you can definitely distribute a pac[kage]…" and "Yes, you can ask the user to provide a key and then use that key to start the SDK".
+    - Decision: publish the installer on GitHub Releases, include the SDK LICENSE/NOTICE reference, BYO key.
+    - README + LICENSE + editor label fix dispatched to a builder.
+
 **Gotchas learned:**
 - The permission handler must allow both `media` and `display-capture`.
 - The electron postinstall may skip the binary download; fix with `node node_modules/electron/install.js`.

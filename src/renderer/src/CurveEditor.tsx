@@ -170,12 +170,15 @@ export default function CurveEditor({ plannedSec, points, beats, onChange, onBea
   // Live readout: while dragging, and while a handle has keyboard focus.
   const activePt = dragging?.kind === 'point' ? dragging.i : focusPt
   const activeBeat = dragging?.kind === 'beat' ? dragging.i : null
-  let readout: { left: number; top: number; node: React.ReactNode } | null = null
+  let readout: { left: number; top: number; below: boolean; node: React.ReactNode } | null = null
   if (activePt !== null && points[activePt]) {
     const p = points[activePt]
+    // Near the top the readout would cover the beat labels, so it drops below the point instead.
+    const below = y(p.level) - 14 < M.t + 8
     readout = {
       left: clamp(x(p.t), 80, W - 80),
-      top: y(p.level) - 14,
+      top: below ? y(p.level) + 18 : y(p.level) - 14,
+      below,
       node: (
         <>
           Tension <b>{p.level}</b> at <b>{fmt(p.t)}</b>
@@ -186,7 +189,8 @@ export default function CurveEditor({ plannedSec, points, beats, onChange, onBea
     const b = beats[activeBeat]
     readout = {
       left: clamp(x(b.t), 80, W - 80),
-      top: M.t - 8,
+      top: M.t + 10,
+      below: true,
       node: (
         <>
           {b.label} at <b>{fmt(b.t)}</b>
@@ -320,7 +324,7 @@ export default function CurveEditor({ plannedSec, points, beats, onChange, onBea
         </svg>
       )}
       {readout && (
-        <div className="readout" style={{ left: readout.left, top: readout.top }} aria-hidden="true">
+        <div className={readout.below ? 'readout below' : 'readout'} style={{ left: readout.left, top: readout.top }} aria-hidden="true">
           {readout.node}
         </div>
       )}
