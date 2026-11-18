@@ -116,8 +116,8 @@ This is the handover document. A new director should be able to take over from t
 | New project | started during 4 to 22 Nov | PASS (repo created 16 Nov) |
 | SDK + live signal | SmartSpectra in a working app, one or more live signals | PASS (fresh-install playtest 18 Nov; evidence in docs/evidence/) |
 | Public repo + setup instructions | https://github.com/Techkeyy/senti (public, created 17 Nov; key scan of full history: 0 matches) | PASS (README quickstart + Release v0.1.0) |
-| Demo video showing the live signal | | PENDING |
-| DEV post from the template, tags `devchallenge, presagechallenge` | | PENDING |
+| Demo video showing the live signal | `demo videos\Senti_Demo_Final.mp4` v2, 2:30, owner approved 18 Nov; YouTube upload by owner | RENDERED, link PENDING |
+| DEV post from the template, tags `devchallenge, presagechallenge` | draft at `demo videos\DEV_POST_DRAFT.md`, needs video link; owner publishes | DRAFTED |
 | Consent and Data Handling section (storage, retention, deletion, telemetry, AI use) | README section written 18 Nov | PASS in README; copy into the DEV post |
 | No medical claims, no covert monitoring | | PASS (red-team copy review 17 Nov; consent screen + "not a medical device") |
 | Prize categories noted (enter both) | | PENDING |
@@ -300,6 +300,12 @@ This is the handover document. A new director should be able to take over from t
     - Narration is locked in `demo videos\senti-film\NARRATION.md`.
     - A Video Builder agent was dispatched with the full master prompt (CDP captures from the dev build with a throwaway user data dir, ElevenLabs VO/music/SFX, Remotion, exactly 150 s / 4500 frames, QA, SHA-verified delivery).
     - The demo level is committed (1691fa0). README v2 with diagrams is committed (c232a27).
+
+30. **Film v2 delivered and approved (18 Nov).**
+    - v1: real captures, blur and claims all passed review, but narration covered only 98 of 150 s. Five lines were added in v2.
+    - v1 said "Everything stays on your machine", which contradicts the Presage summary disclosure on the consent screen. Changed to "Your playtests stay on your machine".
+    - An STT listening check (scribe_v1) passed. The owner listened and approved.
+    - SHA-256 87256ce5…92a6. Next: the owner uploads to YouTube; the link goes into the README and the DEV post.
 
 **Gotchas learned:**
 - The permission handler must allow both `media` and `display-capture`.
