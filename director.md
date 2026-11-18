@@ -79,7 +79,7 @@ This is the handover document. A new director should be able to take over from t
 | 3 Vertical slice | one playtest end to end (ugly UI ok): curve → session → report with real signals | Core Outcome observed once | DONE 17 Nov 21:31: Core Outcome observed (face 100%, 8 startles, 3 mismatches) |
 | 4 Product shell | design skill: real UI, four states, copy | first-time-user pass | PENDING |
 | 5 Failure/recovery | camera lost, no face, key invalid, credits exhausted, app restart mid-session, delete | critical-bug red-team pass | PARTIAL: SDK rebuild recovery, worker crash, recorder retry, video retry and range crash fixed; red-team pass not run |
-| 6 Package | Windows installer on GitHub Releases | fresh-machine install runs | INSTALLER PASS 18 Nov (fresh-state install on owner laptop); Release PENDING |
+| 6 Package | Windows installer on GitHub Releases | fresh-machine install runs | PASS 18 Nov: fresh-state install on owner laptop; Release v0.1.0 published https://github.com/Techkeyy/senti/releases/tag/v0.1.0 (158,003,518 bytes, public download 200) |
 | 7 UAT | owner runs the full journey from the installer | owner PASS | PASS 18 Nov (face 128/130, 0 restarts, report OK) |
 | 8 Submission | README (perfect-readme), demo video (demo-video), DEV post, consent section | all hackathon gates | PENDING |
 
