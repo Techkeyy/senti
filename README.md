@@ -21,7 +21,7 @@ Senti is for the designer who runs those playtests. You draw the intended tensio
 3. Click **New playtest**, draw a curve, agree on the consent screen, play something for a minute or two with F9 to stop, and open the report.
 
 If you only want to see a result first: [the report screenshot](docs/report.png), or the saved sessions in [docs/evidence/](docs/evidence/).
-<!-- demo-level: a sample test level will be linked here once demo-level/ exists -->
+No game handy? Open [`demo-level/index.html`](demo-level/) in Chrome: a 2-minute original test level with a scripted thunder crack, a "scary" door that is meant to fall flat, a jump scare and a boss, plus a suggested intended curve to draw.
 
 ![A real report: the video, the intended curve (dashed), the felt curve (orange), flinch marks, and three mismatches in plain sentences](docs/report.png)
 
